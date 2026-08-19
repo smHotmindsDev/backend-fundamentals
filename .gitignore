@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Environment — never commit secrets; keep .env.example as the template
+.env
+.env.*
+!.env.example
+
+# TypeScript / Node build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test & coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Generated data dumps (seed output, pg_dump, SQL/CSV exports)
+dumps/
+*.dump
+*.sql.gz
+*.pgsql
+*.csv.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Optional tooling
+.turbo/
+.cache/
+tmp/
+temp/
