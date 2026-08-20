@@ -1,6 +1,6 @@
 import * as http from "node:http";
 import { Buffer } from 'node:buffer';
-import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.js";
+import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEFAULT_MAX_AGE, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.js";
 
 const users = [
   {
@@ -12,8 +12,15 @@ const users = [
 const prepareJsonResponse = (response, status, message) => {
   const mimeType = MIME_TYPES.json;
 
-  response.writeHead(status, { "Content-Type": mimeType });
-  response.end(JSON.stringify({ status: status, message: message }))
+  const responseData = JSON.stringify({ status: status, message: message });
+  const contentLength = Buffer.byteLength(responseData, 'utf8');
+
+  response.writeHead(status, {
+    "Content-Type": mimeType,
+    "Content-Length": contentLength,
+    "Cache-Control": `max-age=${DEFAULT_MAX_AGE}`
+  });
+  response.end(responseData)
 }
 
 const validateUser = (users, username, password) => {
@@ -62,11 +69,16 @@ const httpServer = http.createServer((request, response) => {
       })
       .on('end', () => {
         const jsonData = Buffer.concat(body).toString();
-        const objData = JSON.parse(jsonData);
-        const { username, password } = objData;
 
-        const userValidStatus = validateUser(users, username, password);
-        prepareJsonResponse(response, userValidStatus.status, userValidStatus.message);
+        try {
+          const objData = JSON.parse(jsonData);
+          const { username, password } = objData;
+
+          const userValidStatus = validateUser(users, username, password);
+          prepareJsonResponse(response, userValidStatus.status, userValidStatus.message);
+        } catch {
+          prepareJsonResponse(response, STATUS_CODES.badRequest, "Invalid JSON body");
+        }
       });
   }
   else {
