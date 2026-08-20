@@ -1,4 +1,4 @@
-import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.js";
+import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEFAULT_MAX_AGE, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.js";
 
 const option = {
   basePath: `${HOSTNAME}:${PORT}`,
@@ -38,14 +38,22 @@ async function postData(option) {
 
   const url = basePath + path;
 
+  const bodyData = JSON.stringify({
+    username: username,
+    password: password
+  });
+
+  const headersData = {
+    "Content-Type": mimeType,
+    "Content-Length": Buffer.byteLength(bodyData, 'utf8'),
+    "Cache-Control": `max-age=${DEFAULT_MAX_AGE}`
+   }
+
   try {
     const response = await fetch(url, {
       method: method,
-      headers: { "Content-Type": mimeType },
-      body: JSON.stringify({
-        username: username,
-        password: password
-      })
+      headers: headersData,
+      body: bodyData
     });
 
     const data = await response.json();

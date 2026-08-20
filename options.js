@@ -13,6 +13,8 @@ export const STATUS_CODES = {
   not_found: 404
 }
 
+export const DEFAULT_MAX_AGE = 604800;
+
 export const DEMO_USER_ID = 7;
 export const DEMO_USER_NAME = "James Bond";
 export const DEMO_USER_PASSWORD = "1953";
