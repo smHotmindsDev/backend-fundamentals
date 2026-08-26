@@ -31,6 +31,8 @@ dumps/
 *.sql.gz
 *.pgsql
 *.csv.gz
+lorem-100mb.json
+lorem-500mb.json
 
 # OS
 .DS_Store
