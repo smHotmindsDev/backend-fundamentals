@@ -1,7 +1,16 @@
+// TODO A4. Errors, validation, config
+// - Zod validation on all inputs; malformed JSON → clean 422, never a crash.
+// - Central error handler: operational errors (404, validation) vs programmer errors (bugs) — different handling, different logging.
+// - Env config validated at boot; server refuses to start with missing config.
+// - Process-level safety: what happens on an unhandled promise rejection? Make it crash loudly, then discuss why crashing is correct.
+// - **🤖 AI-OK:** Zod syntax reference.
+// - **🧠 Manual-only:** operational-vs-programmer error design, boot validation logic.
+
 import express from 'express';
 import * as fs from 'node:fs';
 import { createReadStream } from 'node:fs';
 import * as path from 'node:path';
+import * as z from "zod";
 
 const app = express();
 const port = 8000;
@@ -115,17 +124,22 @@ app.get('/read-stream', (req, res) => {
   stream.on('error', (err) => {
     console.error('An error occurred:', err.message);
   });
-
-
-
 })
 
+const User = z.object({
+  username: z.string(),
+  password: z.string()
+});
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Name and email are required.' });
+  try {
+    User.parse({ username: username, password: password });
+  } catch(error){
+    if(error instanceof z.ZodError){
+      console.error(error.issues)
+      return res.status(400).json({ error: error.issues});
+    }
   }
 
   if (username === process.env.DEMO_USERNAME && password === process.env.DEMO_PASSWORD) {
