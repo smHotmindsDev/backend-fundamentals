@@ -1,5 +1,4 @@
 // TODO A4. Errors, validation, config
-// - Zod validation on all inputs; malformed JSON → clean 422, never a crash.
 // - Central error handler: operational errors (404, validation) vs programmer errors (bugs) — different handling, different logging.
 // - Env config validated at boot; server refuses to start with missing config.
 // - Process-level safety: what happens on an unhandled promise rejection? Make it crash loudly, then discuss why crashing is correct.
@@ -15,6 +14,16 @@ const app = express();
 const port = 8000;
 const lorem100mbJson = "./lorem-100mb.json";
 const lorem500mbJson = "./lorem-500mb.json";
+
+const EnvSchema = z.object({
+  NODE_ENV: z.enum([
+      'development',
+      'production'
+  ]).default('development'),
+  DEMO_JWT: z.string().transform(Number),
+  DEMO_USERNAME: z.string(),
+  DEMO_PASSWORD: z.string()
+})
 
 const User = z.object({
   username: z.string(),
@@ -70,6 +79,27 @@ const sendLoremJsonResult = (res, isValid, payload) => {
   }
 }
 
+const validateEnv = () => {
+  try {
+    const env = EnvSchema.parse(process.env);
+    return {
+      success: true,
+      env: env
+    };
+  } catch(error){
+    if(error instanceof z.ZodError){
+      console.error(error.issues)
+      return { success: false, error: error.issues };
+    }
+
+    return { success: false, error: 'Internal error' };
+  }
+}
+
+const isValidEnv = validateEnv();
+const env = isValidEnv.env ? isValidEnv.env : null;
+console.log(env)
+
 app.use(express.json());
 
 const requestLoggerMiddleware = (req, res, next) => {
@@ -90,7 +120,7 @@ const authMiddleware = (req, res, next) => {
         return res.status(403).json({ message: 'invalid token' });
       }
 
-    if (token === process.env.DEMO_JWT) {
+    if (token === env?.DEMO_JWT) {
       next();
     } else {
       return res.status(401).json({ message: 'uncorrected token' });
@@ -188,10 +218,10 @@ app.post('/login', (req, res) => {
   const isValid = validateUser(username, password);
 
   if (isValid.success) {
-    if (username === process.env.DEMO_USERNAME && password === process.env.DEMO_PASSWORD) {
+    if (username === env?.DEMO_USERNAME && password === env?.DEMO_PASSWORD) {
       return res.status(200).json({
         "status": "success",
-        "token": process.env.DEMO_JWT,
+        "token": env?.DEMO_JWT,
         "token_type": "Bearer",
       })
     } else {
@@ -217,6 +247,8 @@ const errorHandlerMiddleware = (err, req, res, next) => {
 
 app.use(errorHandlerMiddleware);
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
+if (isValidEnv.success) {
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
