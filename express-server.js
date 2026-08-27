@@ -9,13 +9,66 @@
 import express from 'express';
 import * as fs from 'node:fs';
 import { createReadStream } from 'node:fs';
-import * as path from 'node:path';
 import * as z from "zod";
 
 const app = express();
 const port = 8000;
 const lorem100mbJson = "./lorem-100mb.json";
 const lorem500mbJson = "./lorem-500mb.json";
+
+const User = z.object({
+  username: z.string(),
+  password: z.string()
+});
+
+const validateUser = (username, password) => {
+  try {
+    User.parse({ username: username, password: password });
+    return {
+      success: true,
+    };
+  } catch(error){
+    if(error instanceof z.ZodError){
+      console.error(error.issues)
+      return { success: false, error: error.issues };
+    }
+
+    return { success: false, error: 'Internal error' };
+  }
+}
+
+const JsonInputText = z.object({
+  data: z.object({
+    text: z.string()
+  })
+})
+
+const validateLoremJson = (data) => {
+  try {
+    JsonInputText.parse({ data: data });
+    return {
+      success: true,
+    };
+  } catch(error){
+    if(error instanceof z.ZodError){
+      console.error(error.issues)
+      return { success: false, error: error.issues };
+    }
+
+    return { success: false, error: 'Internal error' };
+  }
+}
+
+const sendLoremJsonResult = (res, isValid, payload) => {
+  if (isValid.success) {
+    return res.status(200).json(payload)
+  } else {
+    return res.status(422).json({
+      "status": "invalid json",
+      "message" : isValid.error
+    })
+  }
+}
 
 app.use(express.json());
 
@@ -59,23 +112,20 @@ app.get('/json-parse-100mb', (req, res) => {
   console.log(`json-parse START at ${start.getTime()}`)
 
   const json = fs.readFileSync(lorem100mbJson, 'utf8');
-  const data = JSON.parse(json)
+  const data = JSON.parse(json);
+  const isValid = validateLoremJson(data);
 
   const finish = new Date();
   const duration = finish.getTime() - start.getTime();
-  console.log(`json-parse FINISH at ${finish.getTime()}, took ${duration}ms`);
+  console.log(`json-parse FINISH at ${finish.getTime()}, took ${duration}ms, json ${isValid.success ? 'valid' : 'invalid'}`);
 
-  res.send({ start: start, finish: finish, duration: duration });
+  const payload = {start, finish, duration};
+  sendLoremJsonResult(res, isValid, payload);
 })
 
 app.get('/await-timer', async (req, res) => {
   const start = Date.now();
-  console.log(`await-timer START at ${start}`)
-
-  // Bugs code
-  // const finish = setTimeout(async () => {
-  //   return new Date();
-  // }, 5000)
+  console.log(`await-timer START at ${start}`);
 
   await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -91,17 +141,20 @@ app.get('/read-sync', (req, res) => {
   console.log(`read-sync START at ${start.getTime()}`)
 
   const json = fs.readFileSync(lorem500mbJson, 'utf8');
-  const data = JSON.parse(json)
+  const data = JSON.parse(json);
+  const isValid = validateLoremJson(data);
 
   const finish = new Date();
   const duration = finish.getTime() - start.getTime();
   console.log(`read-sync FINISH at ${finish.getTime()}, took ${duration}ms`);
 
-  res.send({ start: start, finish: finish, duration: duration });
+  const payload = {start, finish, duration};
+  sendLoremJsonResult(res, isValid, payload);
 })
 
 app.get('/read-stream', (req, res) => {
   let chunksReceived = 0;
+  let data = "";
 
   const start = new Date();
   console.log(`read-stream START at ${start.getTime()}`)
@@ -109,16 +162,20 @@ app.get('/read-stream', (req, res) => {
   const stream = createReadStream(lorem500mbJson, { encoding: 'utf8' });
 
   stream.on('data', (chunk) => {
-    stream.on('data', (chunk) => { chunksReceived++; });
+    data += chunk;
+    chunksReceived++;
   });
 
   stream.on('end', () => {
     console.log('Finished reading file.');
+    const isValid = validateLoremJson(JSON.parse(data));
 
     const finish = new Date();
     const duration = finish.getTime() - start.getTime();
     console.log(`read-stream FINISH at ${finish.getTime()}, took ${duration}ms`);
-    res.send({ start: start, finish: finish, duration: duration });
+
+    const payload = {start, finish, duration};
+    sendLoremJsonResult(res, isValid, payload);
   });
 
   stream.on('error', (err) => {
@@ -126,31 +183,27 @@ app.get('/read-stream', (req, res) => {
   });
 })
 
-const User = z.object({
-  username: z.string(),
-  password: z.string()
-});
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
+  const isValid = validateUser(username, password);
 
-  try {
-    User.parse({ username: username, password: password });
-  } catch(error){
-    if(error instanceof z.ZodError){
-      console.error(error.issues)
-      return res.status(400).json({ error: error.issues});
+  if (isValid.success) {
+    if (username === process.env.DEMO_USERNAME && password === process.env.DEMO_PASSWORD) {
+      return res.status(200).json({
+        "status": "success",
+        "token": process.env.DEMO_JWT,
+        "token_type": "Bearer",
+      })
+    } else {
+      return res.status(401).json({
+        "status": "false",
+        "message": "Username or password incorrect"
+      })
     }
-  }
-
-  if (username === process.env.DEMO_USERNAME && password === process.env.DEMO_PASSWORD) {
-    return res.status(200).json({
-      "status": "success",
-      "token": process.env.DEMO_JWT,
-      "token_type": "Bearer",
-    })
   } else {
-    return res.status(403).json({
-      "status": "false"
+    return res.status(400).json({
+      "status": "false",
+      "message" : isValid.error
     })
   }
 })
@@ -160,8 +213,6 @@ const errorHandlerMiddleware = (err, req, res, next) => {
 
   console.error(err.stack);
   res.status(500).send('Something broke!');
-
-  next();
 }
 
 app.use(errorHandlerMiddleware);
