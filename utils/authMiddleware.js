@@ -1,4 +1,7 @@
-const authMiddleware = (req, res, next) => {
+import ServerError from "./ServerError.js";
+import { env } from "../express-server.js";
+
+const authMiddleware = (req, res, next, env) => {
     const method = req.method;
 
     if (method === 'GET') {
@@ -6,12 +9,13 @@ const authMiddleware = (req, res, next) => {
 
         if (!token) {
             return res.status(403).json({ message: 'invalid token' });
+            next(new ServerError(`Invalid token`, 403))
         }
 
         if (token === env?.DEMO_JWT) {
             next();
         } else {
-            return res.status(401).json({ message: 'uncorrected token' });
+            next(new ServerError(`Uncorrected token`, 401))
         }
     } else {
         next()

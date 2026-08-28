@@ -1,7 +1,5 @@
+import ServerError from "./ServerError.js";
 const routeNotFoundHandler = (req, res, next) => {
-    res.status(404).send("Sorry, can't find that!");
-
-    next();
+    next(new ServerError(`Can't find '${req.originalUrl}' on this server!`, 404))
 }
-
 export default routeNotFoundHandler;
