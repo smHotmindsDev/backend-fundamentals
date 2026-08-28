@@ -1,3 +1,5 @@
+import ServerError from "./ServerError.js";
+
 const sendLoremJsonResult = (res, isValid, payload) => {
     if (isValid.success) {
         return res.status(200).json(payload)
