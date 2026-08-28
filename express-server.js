@@ -1,6 +1,5 @@
 // TODO A4. Errors, validation, config
 // - Central error handler: operational errors (404, validation) vs programmer errors (bugs) — different handling, different logging.
-// - Env config validated at boot; server refuses to start with missing config.
 // - Process-level safety: what happens on an unhandled promise rejection? Make it crash loudly, then discuss why crashing is correct.
 // - **🤖 AI-OK:** Zod syntax reference.
 // - **🧠 Manual-only:** operational-vs-programmer error design, boot validation logic.
@@ -8,127 +7,25 @@
 import express from 'express';
 import * as fs from 'node:fs';
 import { createReadStream } from 'node:fs';
-import * as z from "zod";
+import validateUser from "./utils/validateUser.js";
+import validateEnv from "./utils/validateEnv.js";
+import validateLoremJson from "./utils/validateLoremJson.js";
+import sendLoremJsonResult from "./utils/sendLoremJsonResult.js";
+import requestLoggerMiddleware from "./utils/requestLoggerMiddleware.js";
+import authMiddleware from "./utils/authMiddleware.js";
+import routeNotFoundHandler from "./utils/routeNotFoundHandler.js";
+import errorHandlerMiddleware from "./utils/errorHandlerMiddleware.js";
 
 const app = express();
 const port = 8000;
 const lorem100mbJson = "./lorem-100mb.json";
 const lorem500mbJson = "./lorem-500mb.json";
 
-const EnvSchema = z.object({
-  NODE_ENV: z.enum([
-      'development',
-      'production'
-  ]).default('development'),
-  DEMO_JWT: z.string().transform(Number),
-  DEMO_USERNAME: z.string(),
-  DEMO_PASSWORD: z.string()
-})
-
-const User = z.object({
-  username: z.string(),
-  password: z.string()
-});
-
-const validateUser = (username, password) => {
-  try {
-    User.parse({ username: username, password: password });
-    return {
-      success: true,
-    };
-  } catch(error){
-    if(error instanceof z.ZodError){
-      console.error(error.issues)
-      return { success: false, error: error.issues };
-    }
-
-    return { success: false, error: 'Internal error' };
-  }
-}
-
-const JsonInputText = z.object({
-  data: z.object({
-    text: z.string()
-  })
-})
-
-const validateLoremJson = (data) => {
-  try {
-    JsonInputText.parse({ data: data });
-    return {
-      success: true,
-    };
-  } catch(error){
-    if(error instanceof z.ZodError){
-      console.error(error.issues)
-      return { success: false, error: error.issues };
-    }
-
-    return { success: false, error: 'Internal error' };
-  }
-}
-
-const sendLoremJsonResult = (res, isValid, payload) => {
-  if (isValid.success) {
-    return res.status(200).json(payload)
-  } else {
-    return res.status(422).json({
-      "status": "invalid json",
-      "message" : isValid.error
-    })
-  }
-}
-
-const validateEnv = () => {
-  try {
-    const env = EnvSchema.parse(process.env);
-    return {
-      success: true,
-      env: env
-    };
-  } catch(error){
-    if(error instanceof z.ZodError){
-      console.error(error.issues)
-      return { success: false, error: error.issues };
-    }
-
-    return { success: false, error: 'Internal error' };
-  }
-}
-
-const isValidEnv = validateEnv();
+const isValidEnv = validateEnv(process.env);
 const env = isValidEnv.env ? isValidEnv.env : null;
-console.log(env)
 
 app.use(express.json());
-
-const requestLoggerMiddleware = (req, res, next) => {
-  req.time = new Date(Date.now()).toString();
-  console.log(req.method,req.hostname, req.path, req.time);
-  next();
-}
-
 app.use(requestLoggerMiddleware);
-
-const authMiddleware = (req, res, next) => {
-  const method = req.method;
-
-  if (method === 'GET') {
-    const token = req.headers.authorization;
-
-    if (!token) {
-        return res.status(403).json({ message: 'invalid token' });
-      }
-
-    if (token === env?.DEMO_JWT) {
-      next();
-    } else {
-      return res.status(401).json({ message: 'uncorrected token' });
-    }
-  } else {
-    next()
-  }
-};
 
 // Temporary off
 // app.use(authMiddleware)
@@ -238,15 +135,24 @@ app.post('/login', (req, res) => {
   }
 })
 
-const errorHandlerMiddleware = (err, req, res, next) => {
-  console.error(err.stack);
-
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
-}
-
+app.use(routeNotFoundHandler);
 app.use(errorHandlerMiddleware);
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error(err.name, err.message);
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error(err.name, err.message);
+  process.exit(1);
+});
+
+// Start the server
 if (isValidEnv.success) {
   app.listen(port, () => {
     console.log(`Server listening on port ${port}`);
