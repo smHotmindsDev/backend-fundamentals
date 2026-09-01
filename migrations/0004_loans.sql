@@ -1,4 +1,4 @@
-CREATE TABLE loans (
+CREATE TABLE IF NOT EXISTS loans (
     loan_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     member uuid NOT NULL,
     FOREIGN KEY (member) REFERENCES members(member_id),

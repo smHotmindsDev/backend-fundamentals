@@ -1,4 +1,4 @@
-CREATE TABLE books (
+CREATE TABLE IF NOT EXISTS books (
     book_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     title text NOT NULL,
     author uuid NOT NULL,
