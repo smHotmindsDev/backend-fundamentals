@@ -1,7 +1,7 @@
 import ServerError from "./ServerError.js";
 import { env } from "../express-server.js";
 
-const authMiddleware = (req, res, next, env) => {
+const authMiddleware = (req, res, next) => {
     const method = req.method;
 
     if (method === 'GET') {
