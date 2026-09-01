@@ -2,7 +2,9 @@
   "type": "module",
   "scripts": {
     "start": "NODE_ENV=production node --env-file=.env.production express-server.js",
-    "dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js"
+    "dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js",
+    "migrate": "node --env-file=.env.production runner.js",
+    "migrate:dev": "node --env-file=.env.development runner.js"
   },
   "dependencies": {
     "@fastify/express": "^4.0.7",
