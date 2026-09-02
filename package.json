@@ -4,7 +4,9 @@
     "start": "NODE_ENV=production node --env-file=.env.production express-server.js",
     "dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js",
     "migrate": "node --env-file=.env.production runner.js",
-    "migrate:dev": "node --env-file=.env.development runner.js"
+    "migrate:dev": "node --env-file=.env.development runner.js",
+    "seed": "node --env-file=.env.production seed.js",
+    "seed:dev": "node --env-file=.env.development seed.js"
   },
   "dependencies": {
     "@fastify/express": "^4.0.7",
