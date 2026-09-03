@@ -128,16 +128,19 @@ async function seed() {
                         THEN 1 + ((n - 1) % ${borrowableAuthors})
                     ELSE ${borrowableAuthors} + 1 + ((n - ${borrowableBooks} - 1) % ${UNBORROWED_AUTHORS})
                 END AS author_n,
-                1 + ((n - 1) % 5) AS total_copies
+                1 + ((n - 1) % 5) AS total_copies,
+                -- all dates sit before the loan window so a book exists before it is borrowed
+                (CURRENT_DATE - (730 + ((n * 79) % (365 * 40))))::date AS published_at
             FROM generate_series(1, ${BOOKS}) AS n;
 
-            INSERT INTO books (book_id, title, author, available_copies, total_copies)
+            INSERT INTO books (book_id, title, author, available_copies, total_copies, published_at)
             SELECT
                 sb.book_id,
                 sb.title,
                 sa.author_id,
                 sb.total_copies,
-                sb.total_copies
+                sb.total_copies,
+                sb.published_at
             FROM seed_books sb
             JOIN seed_authors sa ON sa.n = sb.author_n;
         `);
@@ -218,7 +221,9 @@ async function seed() {
             UNION ALL SELECT 'members_with_no_loans', COUNT(*) FROM members m
                      WHERE NOT EXISTS (
                          SELECT 1 FROM loans l WHERE l.member = m.member_id
-                     );
+                     )
+            UNION ALL SELECT 'books_missing_published_at', COUNT(*) FROM books
+                     WHERE published_at IS NULL;
         `);
 
         console.log("\nSeed complete:");
