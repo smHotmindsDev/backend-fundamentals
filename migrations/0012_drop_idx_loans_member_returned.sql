@@ -1,0 +1,1 @@
+DROP INDEX idx_loans_member_returned;
