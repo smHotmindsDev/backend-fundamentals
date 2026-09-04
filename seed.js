@@ -76,7 +76,7 @@ async function seed() {
         await client.query("SET LOCAL synchronous_commit = off");
 
         console.log("Truncating tables...");
-        await client.query("TRUNCATE loans, books, members, authors CASCADE");
+        await client.query("TRUNCATE loans, book_copies, books, members, authors CASCADE");
 
         console.log(`Inserting ${AUTHORS} authors...`);
         await client.query(`
@@ -145,6 +145,14 @@ async function seed() {
             JOIN seed_authors sa ON sa.n = sb.author_n;
         `);
 
+        console.log("Inserting book copies from total_copies...");
+        await client.query(`
+            INSERT INTO book_copies (book_id)
+            SELECT sb.book_id
+            FROM seed_books sb
+            CROSS JOIN LATERAL generate_series(1, sb.total_copies);
+        `);
+
         console.log(`Inserting ${LOANS} loans (this is the slow step)...`);
         await client.query(`
             WITH ids AS (
@@ -185,6 +193,42 @@ async function seed() {
               AND r.rn > r.total_copies;
         `);
 
+        console.log("Assigning copy_id to loans...");
+        await client.query(`
+            WITH numbered_copies AS (
+                SELECT
+                    copy_id,
+                    book_id,
+                    row_number() OVER (PARTITION BY book_id ORDER BY copy_id) AS copy_n,
+                    COUNT(*) OVER (PARTITION BY book_id) AS n_copies
+                FROM book_copies
+            ),
+            ranked_loans AS (
+                SELECT
+                    loan_id,
+                    book,
+                    returned_at IS NULL AS is_open,
+                    row_number() OVER (
+                        PARTITION BY book, (returned_at IS NULL)
+                        ORDER BY borrowed_at, loan_id
+                    ) AS rn
+                FROM loans
+                WHERE copy_id IS NULL
+            )
+            UPDATE loans l
+            SET copy_id = nc.copy_id
+            FROM ranked_loans rl
+            JOIN numbered_copies nc
+              ON nc.book_id = rl.book
+             AND nc.n_copies > 0
+             AND nc.copy_n = CASE
+                 WHEN rl.is_open THEN rl.rn
+                 ELSE ((rl.rn - 1) % nc.n_copies) + 1
+             END
+            WHERE l.loan_id = rl.loan_id
+              AND l.copy_id IS NULL;
+        `);
+
         console.log("Updating available_copies from open loans...");
         await client.query(`
             UPDATE books b
@@ -199,14 +243,23 @@ async function seed() {
         `);
 
         await client.query("COMMIT");
-        await client.query("ANALYZE authors, members, books, loans");
+        await client.query("ANALYZE authors, members, books, book_copies, loans");
 
         const stats = await client.query(`
             SELECT 'authors' AS relation, COUNT(*)::bigint AS n FROM authors
             UNION ALL SELECT 'members', COUNT(*) FROM members
             UNION ALL SELECT 'books', COUNT(*) FROM books
+            UNION ALL SELECT 'book_copies', COUNT(*) FROM book_copies
             UNION ALL SELECT 'loans', COUNT(*) FROM loans
+            UNION ALL SELECT 'loans_missing_copy_id', COUNT(*) FROM loans WHERE copy_id IS NULL
             UNION ALL SELECT 'open_loans', COUNT(*) FROM loans WHERE returned_at IS NULL
+            UNION ALL SELECT 'open_copy_conflicts', COUNT(*) FROM (
+                SELECT copy_id
+                FROM loans
+                WHERE returned_at IS NULL AND copy_id IS NOT NULL
+                GROUP BY copy_id
+                HAVING COUNT(*) > 1
+            ) conflicts
             UNION ALL SELECT 'overdue_open_loans', COUNT(*) FROM loans
                      WHERE returned_at IS NULL AND due_at < CURRENT_DATE
             UNION ALL SELECT 'loans_last_90_days', COUNT(*) FROM loans
