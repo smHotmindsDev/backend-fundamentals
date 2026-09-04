@@ -1,0 +1,2 @@
+DROP INDEX idx_member_with_unreturned_loans;
+DROP INDEX idx_member_due_book_unreturned;
