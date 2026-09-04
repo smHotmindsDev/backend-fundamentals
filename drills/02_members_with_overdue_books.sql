@@ -1,4 +1,5 @@
 -- Members who currently hold overdue books. (JOIN + WHERE on nullable column + date logic)
+EXPLAIN ANALYSE
 SELECT members.first_name, members.last_name, COUNT(*) AS overdue_counts
 FROM members
 JOIN loans ON loans.member=members.member_id
