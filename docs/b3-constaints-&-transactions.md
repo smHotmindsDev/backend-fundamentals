@@ -102,3 +102,13 @@ DROP COLUMN book;
 
 ### **due_at > borrowed_at (CHECK).**
 - already covered by the schema and implemented in `/migrations/0004_loans.sql`
+
+## Transaction
+
+**"borrow a book" = check availability + insert loan + decrement available copies.**
+
+The naive implementation wraps these three steps in a single `BEGIN ... COMMIT` block: read `available_copies` and a free `copy_id`, `INSERT` into `loans`, then `UPDATE books SET available_copies = available_copies - 1`. Each step is `await`-ed sequentially inside one transaction, and any failure triggers a full `ROLLBACK` — this is what makes the operation atomic (all three steps succeed together, or none of them persist).
+
+Run naively — without any locking — against a book with exactly one free copy, two parallel requests both read the same `available_copies` and the same free `copy_id` before either has committed. Both proceed to `INSERT INTO loans`, and the second one fails with a `duplicate key value violates unique constraint "uidx_borrowed_book_copy"` (SQLSTATE `23505`). This is the double-borrow: not because the constraint failed, but because both transactions read the same *stale, not-yet-committed* state and acted on it independently — the classic read-then-write race under `READ COMMITTED` isolation.
+
+Two fixes were implemented and compared. **`SELECT ... FOR UPDATE`** on the `books` row turns the two transactions into a queue: the second transaction blocks until the first commits, then reads the now-updated state — no conflict ever reaches `INSERT`, at the cost of one transaction waiting. **Constraint-based (optimistic)**: no lock is taken; both transactions proceed freely, and the unique index (`uidx_borrowed_book_copy`) itself rejects the losing `INSERT` with `23505`, caught explicitly and turned into `{result: false, message: 'copy already taken, conflict'}` instead of an unhandled exception. This trades a guaranteed-but-slower single pass (`FOR UPDATE`) for a fast response with an explicit conflict signal — but without a retry loop around it, a transaction that loses the race is refused outright even if another copy of the same book was actually free at that moment. Both approaches were verified empirically: with `Promise.all` firing two parallel requests at a book with one remaining copy, `FOR UPDATE` produces one success and one clean rejection with no exception ever reaching the constraint, while the constraint-based version produces one success and one caught `23505`, confirmed against the database (`available_copies` decremented by exactly one, exactly one active loan row).
