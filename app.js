@@ -12,14 +12,14 @@ const pool = new Pool({
     port: 5432,
 });
 
-const placeholderBookId = 'be467a11-603e-485b-a2b2-3d9dc431a648';
+const placeholderBookId = '6671f051-aca5-40e9-824d-f98cf01f4253';
 const placeholderMemberId = '788dc593-c871-4936-8995-3fa915450fe9';
 
 const chkAvailabilitySql = `
     SELECT book_id, available_copies, total_copies
     FROM books
     WHERE book_id = $1
-    FOR UPDATE;
+    ;
 `;
 
 const chkAvailabilityCopySql = `
@@ -112,8 +112,12 @@ async function borrowBook() {
     } catch (error) {
         // Rollback if any query failed
         await client.query('ROLLBACK');
-        throw error;
 
+        if (error.code === '23505') {
+            return { result: false, message: 'copy already taken, conflict' }
+        } else {
+            throw error;
+        }
     } finally {
         // CRITICAL: Always release the client back to the pool
         client.release();
