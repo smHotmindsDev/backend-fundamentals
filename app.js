@@ -12,13 +12,14 @@ const pool = new Pool({
     port: 5432,
 });
 
-const placeholderBookId = '87c53011-9219-4a4e-ba48-7de3540a411a';
+const placeholderBookId = 'be467a11-603e-485b-a2b2-3d9dc431a648';
 const placeholderMemberId = '788dc593-c871-4936-8995-3fa915450fe9';
 
 const chkAvailabilitySql = `
     SELECT book_id, available_copies, total_copies
     FROM books
-    WHERE book_id = $1;
+    WHERE book_id = $1
+    FOR UPDATE;
 `;
 
 const chkAvailabilityCopySql = `
@@ -119,4 +120,6 @@ async function borrowBook() {
     }
 }
 
-borrowBook();
+Promise.all([borrowBook(), borrowBook()]).then((values) => {
+    console.log(values);
+});
