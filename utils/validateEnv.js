@@ -7,7 +7,10 @@ const EnvSchema = z.object({
     ]).default('development'),
     DEMO_JWT: z.string().transform(Number),
     DEMO_USERNAME: z.string(),
-    DEMO_PASSWORD: z.string()
+    DEMO_PASSWORD: z.string(),
+    POSTGRES_USER: z.string(),
+    POSTGRES_PASSWORD: z.string(),
+    POSTGRES_DB: z.string(),
 })
 
 const validateEnv = (rawEnv) => {
