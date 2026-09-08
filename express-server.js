@@ -1,72 +1,46 @@
+// TODO A4. Errors, validation, config
+// - Central error handler: operational errors (404, validation) vs programmer errors (bugs) — different handling, different logging.
+// - Process-level safety: what happens on an unhandled promise rejection? Make it crash loudly, then discuss why crashing is correct.
+// - **🤖 AI-OK:** Zod syntax reference.
+// - **🧠 Manual-only:** operational-vs-programmer error design, boot validation logic.
+
 import express from 'express';
 import * as fs from 'node:fs';
-import { createReadStream } from 'node:fs';
-import * as path from 'node:path';
+import logger from "./utils/logger.js";
+import validateUserMiddleware from "./utils/validateUserMiddleware.js";
+import validateEnv from "./utils/validateEnv.js";
+import requestLoggerMiddleware from "./utils/requestLoggerMiddleware.js";
+import authMiddleware from "./utils/authMiddleware.js";
+import routeNotFoundHandler from "./utils/routeNotFoundHandler.js";
+import errorHandlerMiddleware from "./utils/errorHandlerMiddleware.js";
+import validateLoremJsonMiddleware from "./utils/validateLoremJsonMiddleware.js";
+import ServerError from "./utils/ServerError.js";
+import readFileSyncMiddleware from "./utils/readFileSyncMiddleware.js";
+import readStreamMiddleware from "./utils/readStreamMiddleware.js";
 
 const app = express();
 const port = 8000;
 const lorem100mbJson = "./lorem-100mb.json";
 const lorem500mbJson = "./lorem-500mb.json";
 
-app.use(express.json());
+const isValidEnv = validateEnv(process.env);
+export const env = isValidEnv.env ? isValidEnv.env : null;
 
-const requestLoggerMiddleware = (req, res, next) => {
-  req.time = new Date(Date.now()).toString();
-  console.log(req.method,req.hostname, req.path, req.time);
-  next();
-}
+app.use(express.json());
 
 app.use(requestLoggerMiddleware);
 
-const authMiddleware = (req, res, next) => {
-  const method = req.method;
-
-  if (method === 'GET') {
-    const token = req.headers.authorization;
-
-    if (!token) {
-        return res.status(403).json({ message: 'invalid token' });
-      }
-
-    if (token === process.env.DEMO_JWT) {
-      next();
-    } else {
-      return res.status(401).json({ message: 'uncorrected token' });
-    }
-  } else {
-    next()
-  }
-};
-
-// Temporary off
-// app.use(authMiddleware)
-
-app.get('/', async (req, res) => {
+app.get('/', authMiddleware, (req, res) => {
   res.send("Hello Work")
 });
 
-app.get('/json-parse-100mb', (req, res) => {
-  const start = new Date();
-  console.log(`json-parse START at ${start.getTime()}`)
-
-  const json = fs.readFileSync(lorem100mbJson, 'utf8');
-  const data = JSON.parse(json)
-
-  const finish = new Date();
-  const duration = finish.getTime() - start.getTime();
-  console.log(`json-parse FINISH at ${finish.getTime()}, took ${duration}ms`);
-
-  res.send({ start: start, finish: finish, duration: duration });
+app.get('/json-parse-100mb', readFileSyncMiddleware(lorem100mbJson), validateLoremJsonMiddleware, (req, res) => {
+  res.send("Done")
 })
 
 app.get('/await-timer', async (req, res) => {
   const start = Date.now();
-  console.log(`await-timer START at ${start}`)
-
-  // Bugs code
-  // const finish = setTimeout(async () => {
-  //   return new Date();
-  // }, 5000)
+  console.log(`await-timer START at ${start}`);
 
   await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -77,57 +51,51 @@ app.get('/await-timer', async (req, res) => {
   res.send({ start: start, finish: finish, duration: duration});
 })
 
-app.get('/read-sync', (req, res) => {
-  const start = new Date();
-  console.log(`read-sync START at ${start.getTime()}`)
-
-  const json = fs.readFileSync(lorem500mbJson, 'utf8');
-  const data = JSON.parse(json)
-
-  const finish = new Date();
-  const duration = finish.getTime() - start.getTime();
-  console.log(`read-sync FINISH at ${finish.getTime()}, took ${duration}ms`);
-
-  res.send({ start: start, finish: finish, duration: duration });
+app.get('/read-sync', readFileSyncMiddleware(lorem500mbJson), validateLoremJsonMiddleware, (req, res) => {
+  res.send("Done")
 })
 
-app.get('/read-stream', (req, res) => {
-  let chunksReceived = 0;
+app.get('/read-stream', readStreamMiddleware(lorem500mbJson), validateLoremJsonMiddleware, (req, res, next) => {
+  res.send("Done")
+})
 
-});
+app.post('/login', validateUserMiddleware,(req, res, next) => {
+  const {username, password} = req.validUser;
 
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Name and email are required.' });
-  }
-
-  if (username === process.env.DEMO_USERNAME && password === process.env.DEMO_PASSWORD) {
+  if (username === env?.DEMO_USERNAME && password === env?.DEMO_PASSWORD) {
     return res.status(200).json({
       "status": "success",
-      "token": process.env.DEMO_JWT,
+      "token":env?.DEMO_JWT,
       "token_type": "Bearer",
     })
   } else {
-    return res.status(403).json({
-      "status": "false"
-    })
+    next(new ServerError(`Username or password incorrect`, 401))
   }
 })
 
-const errorHandlerMiddleware = (err, req, res, next) => {
-  console.error(err.stack);
-
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
-
-  next();
-}
-
+app.use(routeNotFoundHandler);
 app.use(errorHandlerMiddleware);
-
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error(err.name, err.message);
+  logger.fatal(
+      { name: err.name, message: err.message }, 'UNHANDLED REJECTION! 💥 Shutting down...');
+  process.exit(1);
 });
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error(err.name, err.message);
+  logger.fatal(
+      { name: err.name, message: err.message }, 'UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  process.exit(1);
+});
+
+// Start the server
+if (isValidEnv.success) {
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
