@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import logger from './utils/logger.js';
 import validateEnv from "./utils/validateEnv.js";
 
 const isValidEnv = validateEnv(process.env);
@@ -12,6 +13,7 @@ const pool = new Pool({
     port: 5432,
 });
 
+// B3. Constraints & transactions
 const placeholderBookId = '6671f051-aca5-40e9-824d-f98cf01f4253';
 const placeholderMemberId = '788dc593-c871-4936-8995-3fa915450fe9';
 
@@ -124,6 +126,82 @@ async function borrowBook() {
     }
 }
 
-Promise.all([borrowBook(), borrowBook()]).then((values) => {
-    console.log(values);
-});
+// Promise.all([borrowBook(), borrowBook()]).then((values) => {
+//     console.log(values);
+// });
+
+// B4. N+1 lab
+function assertDefined(value, context) {
+    if (typeof value === 'undefined') {
+        logger.error({ value }, context);
+        throw new Error(context);
+    }
+}
+
+function assertArray(value, context) {
+    if (!Array.isArray(value)) {
+        logger.error({ value }, context);
+        throw new Error(context);
+    }
+}
+async function listOfMembers (numberOfMembers) {
+    // You MUST check out a specific client instance for a transaction
+    const client = await pool.connect();
+
+    const membersSql = `
+        SELECT member_id
+        FROM members
+        ORDER BY member_id
+        LIMIT $1;
+    `;
+
+    const loansForMemberSql = `
+        SELECT COUNT(*) as loans_counter
+        FROM loans
+        WHERE member = $1;
+    `;
+
+    let loansQueryCounter = 0;
+    const startTimestamp = Date.now();
+
+    try {
+        const resultMembers = await client.query(membersSql, [numberOfMembers]);
+        assertDefined(resultMembers.rows, 'Members SQL: resultMembers.rows is undefined');
+        assertArray(resultMembers.rows, 'Members SQL: resultMembers.rows is not array');
+
+        for (let i = 0; i < numberOfMembers; i++) {
+            const member = resultMembers.rows[i];
+            assertDefined(member, `Members SQL: resultMembers.rows[${i}] not found`);
+
+            const memberId = member.member_id;
+            assertDefined(memberId, `Members SQL: member.member_id from resultMembers.rows[${i}] not found`);
+
+            loansQueryCounter++;
+            const resultLoans = await client.query(loansForMemberSql, [memberId]);
+            assertArray(resultLoans.rows, 'Loans SQL: resultLoans.rows is not array');
+
+            const loans = resultLoans.rows[0];
+            assertDefined(loans, `Loans SQL: loans from resultLoans.rows[0] not found`);
+
+            const loansCounter = loans.loans_counter;
+            assertDefined(loansCounter, `Loans SQL: loansCounter from resultLoans.rows[0] not found`);
+
+            console.log(`${i + 1}: Member ${memberId} borrowed ${loansCounter} books`)
+        }
+    } catch (error) {
+        logger.error({ error: error }, 'listOfMembers failed');
+        throw error;
+    } finally {
+        const finishTimestamp = Date.now();
+        const duration = finishTimestamp - startTimestamp;
+
+        const startDate = new Date(startTimestamp);
+        const finishDate = new Date(finishTimestamp);
+
+        logger.info({ startDate, finishDate, duration, loansQueryCounter }, 'listOfMembers finished');
+        // CRITICAL: Always release the client back to the pool
+        client.release();
+    }
+}
+
+await listOfMembers(50);
