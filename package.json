@@ -1,0 +1,17 @@
+{
+  "type": "module",
+  "scripts": {
+    "start": "NODE_ENV=production node --env-file=.env.production express-server.js",
+    "dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js"
+  },
+  "dependencies": {
+    "@fastify/express": "^4.0.7",
+    "express": "^5.2.1",
+    "fastify": "^5.12.1",
+    "fastify-auth": "^1.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "pino-pretty": "^13.1.3"
+  }
+}
