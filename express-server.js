@@ -1,7 +1,12 @@
 import express from 'express';
+import * as fs from 'node:fs';
+import { createReadStream } from 'node:fs';
+import * as path from 'node:path';
 
 const app = express();
 const port = 8000;
+const lorem100mbJson = "./lorem-100mb.json";
+const lorem500mbJson = "./lorem-500mb.json";
 
 app.use(express.json());
 
@@ -33,10 +38,62 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-app.use(authMiddleware)
+// Temporary off
+// app.use(authMiddleware)
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
+app.get('/', async (req, res) => {
+  res.send("Hello Work")
+});
+
+app.get('/json-parse-100mb', (req, res) => {
+  const start = new Date();
+  console.log(`json-parse START at ${start.getTime()}`)
+
+  const json = fs.readFileSync(lorem100mbJson, 'utf8');
+  const data = JSON.parse(json)
+
+  const finish = new Date();
+  const duration = finish.getTime() - start.getTime();
+  console.log(`json-parse FINISH at ${finish.getTime()}, took ${duration}ms`);
+
+  res.send({ start: start, finish: finish, duration: duration });
+})
+
+app.get('/await-timer', async (req, res) => {
+  const start = Date.now();
+  console.log(`await-timer START at ${start}`)
+
+  // Bugs code
+  // const finish = setTimeout(async () => {
+  //   return new Date();
+  // }, 5000)
+
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  const finish = Date.now();
+  const duration = finish - start;
+  console.log(`await-timer FINISH at ${finish}, took ${duration}ms`);
+
+  res.send({ start: start, finish: finish, duration: duration});
+})
+
+app.get('/read-sync', (req, res) => {
+  const start = new Date();
+  console.log(`read-sync START at ${start.getTime()}`)
+
+  const json = fs.readFileSync(lorem500mbJson, 'utf8');
+  const data = JSON.parse(json)
+
+  const finish = new Date();
+  const duration = finish.getTime() - start.getTime();
+  console.log(`read-sync FINISH at ${finish.getTime()}, took ${duration}ms`);
+
+  res.send({ start: start, finish: finish, duration: duration });
+})
+
+app.get('/read-stream', (req, res) => {
+  let chunksReceived = 0;
+
 });
 
 app.post('/login', (req, res) => {
