@@ -1,8 +1,14 @@
 {
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=production node --env-file=.env.production express-server.js",
-    "dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js"
+    "start": "NODE_ENV=production node --env-file=.env.production app.js",
+    "dev": "NODE_ENV=development nodemon --env-file=.env.development app.js",
+    "server": "NODE_ENV=production node --env-file=.env.production express-server.js",
+    "server:dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js",
+    "migrate": "node --env-file=.env.production runner.js",
+    "migrate:dev": "node --env-file=.env.development runner.js",
+    "seed": "node --env-file=.env.production seed.js",
+    "seed:dev": "node --env-file=.env.development seed.js"
   },
   "dependencies": {
     "@fastify/express": "^4.0.7",
@@ -11,7 +17,8 @@
     "fastify-auth": "^1.1.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",

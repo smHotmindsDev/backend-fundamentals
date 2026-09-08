@@ -49,3 +49,6 @@ Thumbs.db
 .cache/
 tmp/
 temp/
+lorem-100mb.json
+lorem-500mb.json
+/logs
