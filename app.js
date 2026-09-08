@@ -148,43 +148,31 @@ async function listOfMembers (numberOfMembers) {
     // You MUST check out a specific client instance for a transaction
     const client = await pool.connect();
 
-    const membersSql = `
-        SELECT member_id
+    const membersSqlWithJoin = `
+        SELECT members.member_id, COUNT(loans.loan_id) AS loans_counts
         FROM members
+        LEFT JOIN loans ON loans.member=members.member_id
+        GROUP BY members.member_id
         ORDER BY member_id
         LIMIT $1;
     `;
 
-    const loansForMemberSql = `
-        SELECT COUNT(*) as loans_counter
-        FROM loans
-        WHERE member = $1;
-    `;
-
-    let loansQueryCounter = 0;
     const startTimestamp = Date.now();
 
     try {
-        const resultMembers = await client.query(membersSql, [numberOfMembers]);
+        const resultMembers = await client.query(membersSqlWithJoin, [numberOfMembers]);
         assertDefined(resultMembers.rows, 'Members SQL: resultMembers.rows is undefined');
         assertArray(resultMembers.rows, 'Members SQL: resultMembers.rows is not array');
 
-        for (let i = 0; i < numberOfMembers; i++) {
+        for (let i = 0; i < resultMembers.rows.length; i++) {
             const member = resultMembers.rows[i];
             assertDefined(member, `Members SQL: resultMembers.rows[${i}] not found`);
 
             const memberId = member.member_id;
             assertDefined(memberId, `Members SQL: member.member_id from resultMembers.rows[${i}] not found`);
 
-            loansQueryCounter++;
-            const resultLoans = await client.query(loansForMemberSql, [memberId]);
-            assertArray(resultLoans.rows, 'Loans SQL: resultLoans.rows is not array');
-
-            const loans = resultLoans.rows[0];
-            assertDefined(loans, `Loans SQL: loans from resultLoans.rows[0] not found`);
-
-            const loansCounter = loans.loans_counter;
-            assertDefined(loansCounter, `Loans SQL: loansCounter from resultLoans.rows[0] not found`);
+            const loansCounter = member.loans_counts;
+            assertDefined(loansCounter, `Members SQL: member.loans_counts from resultMembers.rows[${i}] not found`);
 
             console.log(`${i + 1}: Member ${memberId} borrowed ${loansCounter} books`)
         }
@@ -198,7 +186,7 @@ async function listOfMembers (numberOfMembers) {
         const startDate = new Date(startTimestamp);
         const finishDate = new Date(finishTimestamp);
 
-        logger.info({ startDate, finishDate, duration, loansQueryCounter }, 'listOfMembers finished');
+        logger.info({ startDate, finishDate, duration, queryCount: 1}, 'listOfMembers finished');
         // CRITICAL: Always release the client back to the pool
         client.release();
     }
