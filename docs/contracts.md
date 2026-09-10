@@ -26,17 +26,17 @@ Returned loans still count. The query does **not** filter on `loans.returned_at`
 
 ### Success
 
-| | |
-| --- | --- |
-| Status | `200` |
-| Body | JSON array, **at most** 10 elements (fewer than 10 is valid; empty array is valid) |
+|        |                                                                                    |
+| ------ | ---------------------------------------------------------------------------------- |
+| Status | `200`                                                                              |
+| Body   | JSON array, **at most** 10 elements (fewer than 10 is valid; empty array is valid) |
 
 Each element:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `book_id` | uuid | Postgres column `books.book_id` |
-| `title` | string | |
+| Field          | Type    | Notes                                                                     |
+| -------------- | ------- | ------------------------------------------------------------------------- |
+| `book_id`      | uuid    | Postgres column `books.book_id`                                           |
+| `title`        | string  |                                                                           |
 | `borrow_count` | integer | `COUNT(loans.loan_id)::int` in SQL so `pg` returns a number, not a string |
 
 Order is deterministic: `borrow_count` descending, then `book_id` ascending.
@@ -45,11 +45,11 @@ Empty database (or no matching rows after grouping) → `200` and `[]`. The quer
 
 ### Errors
 
-| Status | When |
-| --- | --- |
-| `401` | `Authorization` header missing |
-| `401` | header present, value does not match the configured key (including a well-formed `Bearer` with the wrong secret) |
-| `429` | key is valid, per-key request limit exhausted |
+| Status | When                                                                                                                              |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `401`  | `Authorization` header missing                                                                                                    |
+| `401`  | `Authorization` header  present, value does not match the configured key (including a well-formed `Bearer` with the wrong secret) |
+| `429`  | `Authorization` header key is valid, per-key request limit exhausted                                                              |
 
 There is no `403`: a single shared API key has no “authenticated but not allowed” case.
 
