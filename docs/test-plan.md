@@ -2,18 +2,20 @@
 
 What is tested at which level, and why.
 
-One behaviour = one row. Fill before writing tests.
+One behaviour = one row. Fill before writing tests. Rows with empty Happy / Error wait on a contract in `docs/contracts.md`.
+
 ## Unit
 
-Pure logic, no I/O. pure logic in isolation, no I/O. Fast (ms), many.
+Pure logic in isolation, no I/O. Fast (ms), many.
 
 Here: overdue calculation, pagination math, rate-limiter logic, validation schemas.
 
-| What | Why this level | Happy path | Error / edge |  
-|-|---|---|---|  
-| | | | |  
-| | | | |  
-| | | | |  
+| What | Why this level | Happy path | Error / edge |
+| --- | --- | --- | --- |
+| Per-key rate limiter | In-memory counter; no I/O | `k ≤ N` requests → allow | Request `N+1` → deny |
+| Pagination math (`GET /books`) | Offset/limit arithmetic is pure | — | — |
+| Overdue calculation | Date logic; freeze time, do not hit Postgres | — | — |
+| Validation schemas (Zod) | Parses input in memory | — | — |
 
 ## Integration
 
@@ -21,15 +23,24 @@ Own code + real Postgres. Do not mock `pg`.
 
 Here: every endpoint against a real test Postgres (Docker), repositories/queries, the borrow transaction.
 
-| What                                                                          | Why this level                                                            | Happy path                                                                      | Error / edge                                                                                                                                                                                                    |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /books?search=&page=` — pagination                                       |                                                                           |                                                                                 |                                                                                                                                                                                                                 |
-| `POST /loans` — the transactional borrow                                      |                                                                           |                                                                                 |                                                                                                                                                                                                                 |
-| `POST /loans/:id/return` — idempotent                                         |                                                                           |                                                                                 |                                                                                                                                                                                                                 |
-| `GET /reports/top-books` — топ 10 книг за останні 90 днів включно | Агрегація по реальних рядках у Postgres; мок `pg` нічого не доведе | Seed у test DB (не `seed.js`), відносні дати від `CURRENT_DATE`. Очікувана відповідь — JSON нижче (лічильник **у вікні**, не кількість вставлених рядків). | Порожня БД → `[]`; немає `Authorization` → 401; ключ не збігається → 401 |
-| Auth-lite: single API key via header + per-key rate limit (in-memory is fine) | Перевіряє наявність та валідність API ключа в Header запитів.             | правильний ключ - 200                                                           | немає API key - 401;<br>невалідний API key - 401;                                                                                                                                                               |
+Auth-lite is HTTP contract (status + header), not limiter arithmetic (that is unit) and not a full user journey (that is E2E). These rows do not require seeded books.
 
-Expected body for `GET /reports/top-books` (HTTP 200), computed from the fixture **after** applying `borrowed_at >= CURRENT_DATE - 90 days`. Inserted loans outside the window count as 0 (Steam House 42 @ 91d, Mysterious Island 100 @ 100d). Tie 44/44: Castaways `…0006` before Robur `…0007`. The two extra slots to reach 10 are the lowest `book_id` zeros: Steam House, then Paris. Around the Moon, The Green Ray, and The Mysterious Island are not in the list.
+| What                                         | Why this level                                                      | Happy path                                                    | Error / edge                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Auth-lite: `Authorization` header            | HTTP status mapping; no SQL                                         | Valid `Authorization: Bearer <key>` → request is not rejected | Missing header → `401`; well-formed `Bearer` with the wrong secret → `401`; valid key, limit exhausted → `429` |
+| `GET /reports/top-books` — empty database    | Empty ranking is a query result, not an `if`                        | `200` + `[]`                                                  | —                                                                                                              |
+| `GET /reports/top-books` — ranked report     | Mocking `pg` cannot prove `COUNT`, the 90-day window, or `ORDER BY` | `200` + JSON below (window count, tie-break, zeros)           | —                                                                                                              |
+| `GET /books?search=&page=` — pagination      | Real `LIMIT`/`OFFSET` against Postgres                              | —                                                             | —                                                                                                              |
+| `POST /loans` — transactional borrow         | Real transaction, constraints, `409` on conflict                    | —                                                             | —                                                                                                              |
+| `POST /loans` — double-borrow race           | Two parallel borrows of the last copy; exactly one succeeds         | —                                                             | —                                                                                                              |
+| `POST /loans/:id/return` — idempotent return | Second return is `200` no-op; assert DB state                       | —                                                             | —                                                                                                              |
+
+
+Response-time budget for `GET /reports/top-books` (200 ms on ~500k loans): **not** in this suite. Check the query plan / measure locally on the full dataset. Functional tests use the tiny seed below.
+
+### Expected body for `GET /reports/top-books` (`200`)
+
+Computed from the fixture in `docs/contracts.md` **after** `borrowed_at >= CURRENT_DATE - 90 days`. Inserted loans outside the window count as 0 (Steam House 42 @ 91d, Mysterious Island 100 @ 100d). Tie 44/44: Castaways `…0006` before Robur `…0007`. The two extra slots to reach 10 are the lowest `book_id` zeros: Steam House, then Paris. Around the Moon, The Green Ray, and The Mysterious Island are not in the list.
 
 ```json
 [
@@ -52,6 +63,6 @@ Full flows through the running HTTP server.
 
 Here: one flow is enough — create member → borrow → return → verify report.
 
-| What | Why this level | Happy path | Error / edge |  
-|---|---|---|---|  
-| | | | |
+| What | Why this level | Happy path | Error / edge |
+| --- | --- | --- | --- |
+| Create member → borrow → return → `GET /reports/top-books` | Crosses several endpoints and persisted state; unit/integration rows do not | — | — |
