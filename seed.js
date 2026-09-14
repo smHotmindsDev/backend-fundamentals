@@ -133,13 +133,11 @@ async function seed() {
                 (CURRENT_DATE - (730 + ((n * 79) % (365 * 40))))::date AS published_at
             FROM generate_series(1, ${BOOKS}) AS n;
 
-            INSERT INTO books (book_id, title, author, available_copies, total_copies, published_at)
+            INSERT INTO books (book_id, title, author, published_at)
             SELECT
                 sb.book_id,
                 sb.title,
                 sa.author_id,
-                sb.total_copies,
-                sb.total_copies,
                 sb.published_at
             FROM seed_books sb
             JOIN seed_authors sa ON sa.n = sb.author_n;
@@ -175,22 +173,27 @@ async function seed() {
                  LATERAL (SELECT (CURRENT_DATE - (1 + ((i * 13) % 540)))::date AS borrowed_at) AS d;
         `);
 
-        console.log("Capping open loans to each book's total_copies...");
+        console.log("Capping open loans to each book's copy count...");
         await client.query(`
-            WITH ranked AS (
+            WITH copy_counts AS (
+                SELECT book_id, COUNT(*)::int AS n_copies
+                FROM book_copies
+                GROUP BY book_id
+            ),
+            ranked AS (
                 SELECT
                     l.loan_id,
-                    b.total_copies,
+                    COALESCE(c.n_copies, 0) AS n_copies,
                     row_number() OVER (PARTITION BY l.book ORDER BY l.borrowed_at DESC) AS rn
                 FROM loans l
-                JOIN books b ON b.book_id = l.book
+                LEFT JOIN copy_counts c ON c.book_id = l.book
                 WHERE l.returned_at IS NULL
             )
             UPDATE loans l
             SET returned_at = l.due_at
             FROM ranked r
             WHERE l.loan_id = r.loan_id
-              AND r.rn > r.total_copies;
+              AND r.rn > r.n_copies;
         `);
 
         console.log("Assigning copy_id to loans...");
@@ -227,19 +230,6 @@ async function seed() {
              END
             WHERE l.loan_id = rl.loan_id
               AND l.copy_id IS NULL;
-        `);
-
-        console.log("Updating available_copies from open loans...");
-        await client.query(`
-            UPDATE books b
-            SET available_copies = b.total_copies - c.open_count
-            FROM (
-                SELECT book, COUNT(*)::int AS open_count
-                FROM loans
-                WHERE returned_at IS NULL
-                GROUP BY book
-            ) c
-            WHERE b.book_id = c.book;
         `);
 
         await client.query("COMMIT");
