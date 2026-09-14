@@ -11,9 +11,14 @@ Returned loans still count. The query does **not** filter on `loans.returned_at`
 `GET` — no database writes.
 
 ### Request
-
 - **Path** — `/reports/top-books`
+- **Path parameters:** none
+- **Headers:**
+- `X-API-Key: abcdef12345`
 - **Query / body** — none
+
+`X-API-Key: abcdef12345` is a placeholder.
+Authorization is described in a separate document.
 
 ### Success
 
@@ -66,25 +71,27 @@ Deterministic ids — no `gen_random_uuid()` in fixtures (example: `00000000-000
 
 One author. Loans must satisfy FKs (`author`, `member`, `copy_id`) and the partial unique index on open loans (`copy_id` where `returned_at IS NULL`). Returned loans are enough for this report; many members are not required if every loan is returned.
 
+**One `book_copies` row per book is enough**, and every loan of that book points at it. Because each loan here is returned, the partial unique index does not apply, so any number of closed loans may share a single copy. This report never reads availability — copies exist only to satisfy the `copy_id` FK.
+
 **Inserted loan counts vs API counts are different.** Column *inserted_loans* is how many `loans` rows you write. The API returns the count **inside the 90-day window**. Steam House (42 loans at 91 days) and The Mysterious Island (100 at 100 days) therefore appear as `0`.
 
 `borrowed_at` is the interval passed to `CURRENT_DATE - INTERVAL '<n> day'`; `-` means no loans inserted.
 
 ```csv
-title,inserted_loans,borrowed_at,book_id,available_copies,total_copies,published_at
-Twenty Thousand Leagues,50,30 day,00000000-0000-0000-0000-000000000000,25,50,1905-01-01
-Around the World in 80 Days,49,30 day,00000000-0000-0000-0000-000000000001,25,49,1905-01-01
-Journey to the Centre of the Earth,48,30 day,00000000-0000-0000-0000-000000000002,25,48,1905-01-01
-From the Earth to the Moon,47,30 day,00000000-0000-0000-0000-000000000003,25,47,1905-01-01
-Michael Strogoff,46,30 day,00000000-0000-0000-0000-000000000004,25,46,1905-01-01
-Five Weeks in a Balloon,45,89 day,00000000-0000-0000-0000-000000000005,25,45,1905-01-01
-In Search of the Castaways,44,90 day,00000000-0000-0000-0000-000000000006,25,44,1905-01-01
-Robur the Conqueror,44,30 day,00000000-0000-0000-0000-000000000007,25,44,1905-01-01
-The Steam House,42,91 day,00000000-0000-0000-0000-000000000008,25,42,1905-01-01
-Paris in the Twentieth Century,0,-,00000000-0000-0000-0000-000000000009,10,10,1905-01-01
-Around the Moon,0,-,00000000-0000-0000-0000-000000000010,10,10,1905-01-01
-The Green Ray,0,-,00000000-0000-0000-0000-000000000011,10,10,1905-01-01
-The Mysterious Island,100,100 day,00000000-0000-0000-0000-000000000012,100,100,1905-01-01
+title,inserted_loans,borrowed_at,book_id,published_at
+Twenty Thousand Leagues,50,30 day,00000000-0000-0000-0000-000000000000,1905-01-01
+Around the World in 80 Days,49,30 day,00000000-0000-0000-0000-000000000001,1905-01-01
+Journey to the Centre of the Earth,48,30 day,00000000-0000-0000-0000-000000000002,1905-01-01
+From the Earth to the Moon,47,30 day,00000000-0000-0000-0000-000000000003,1905-01-01
+Michael Strogoff,46,30 day,00000000-0000-0000-0000-000000000004,1905-01-01
+Five Weeks in a Balloon,45,89 day,00000000-0000-0000-0000-000000000005,1905-01-01
+In Search of the Castaways,44,90 day,00000000-0000-0000-0000-000000000006,1905-01-01
+Robur the Conqueror,44,30 day,00000000-0000-0000-0000-000000000007,1905-01-01
+The Steam House,42,91 day,00000000-0000-0000-0000-000000000008,1905-01-01
+Paris in the Twentieth Century,0,-,00000000-0000-0000-0000-000000000009,1905-01-01
+Around the Moon,0,-,00000000-0000-0000-0000-000000000010,1905-01-01
+The Green Ray,0,-,00000000-0000-0000-0000-000000000011,1905-01-01
+The Mysterious Island,100,100 day,00000000-0000-0000-0000-000000000012,1905-01-01
 ```
 
 Author FK on every book: `00000000-0000-0000-0000-000000000000`.
