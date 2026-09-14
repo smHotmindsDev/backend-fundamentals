@@ -83,10 +83,10 @@ The `requestId` is a server-generated UUID v4, present in every error response a
 The `requestId` is non-deterministic, so test assertions cannot perform a deep equality check on the body; instead, compare `statusCode`, `error`, and `message`, while validating the `requestId` against a regular expression and matching it with the `X-Request-Id` header.
 
 ## Error types
-* **bad_request**: Protocol level error: incorrect `Content-Type`, unparseable JSON, or invalid query parameter.
+* **bad_request**: Protocol level error: incorrect `Content-Type`, or invalid query parameter.
 * **invalid_auth**: Key is missing or invalid.
 * **not_found**: Unknown resource or unknown ID in the request body.
 * **conflict**: Database state prevents the operation (e.g., no available copies, copy already occupied).
-* **validation_error**: JSON is valid but fails semantic validation; the only case containing `details`.
+* **validation_error**: unparseable JSON; JSON is valid but fails semantic validation; the only case containing `details`.
 * **rate_limit_error**: Key rate limit exceeded.
 * **internal_error**: Unexpected error; message is always static.
