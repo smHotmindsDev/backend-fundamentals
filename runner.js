@@ -19,7 +19,9 @@ const migration_dir = './migrations';
 function readFolder(dir) {
     try {
         const allFiles = fs.readdirSync(dir);
-        const sqlFiles = allFiles.filter(file => path.extname(file).toLowerCase() === '.sql');
+        const sqlFiles = allFiles
+            .filter(file => path.extname(file).toLowerCase() === '.sql')
+            .sort();
         console.log(`Loading ${dir}`);
         console.log(sqlFiles);
 
@@ -60,16 +62,25 @@ async function runMigration() {
             )
         `);
 
-        const res = await client.query('SELECT * FROM schema_migration LIMIT 20');
+        const res = await client.query('SELECT filename FROM schema_migration');
         const sqlFiles = readFolder(migration_dir);
-        const implementedSqlFiles = res.rows.map((row) => row.filename);
-        const missingSqlFiles = sqlFiles.filter(file => !implementedSqlFiles.includes(file));
+        const implementedSqlFiles = new Set(res.rows.map((row) => row.filename));
+        const missingSqlFiles = sqlFiles.filter(file => !implementedSqlFiles.has(file));
 
         if (missingSqlFiles.length > 0) {
             console.log('Migration rows:', missingSqlFiles);
             for (const filename of missingSqlFiles) {
-                await migration(client, filename);
-                await logMigration(client, filename);
+                // DDL and its schema_migration row must land together, or a crash
+                // between them leaves the migration applied but unrecorded.
+                await client.query('BEGIN');
+                try {
+                    await migration(client, filename);
+                    await logMigration(client, filename);
+                    await client.query('COMMIT');
+                } catch (err) {
+                    await client.query('ROLLBACK');
+                    throw err;
+                }
                 console.log(`✅ Success: ${filename}`);
             }
         } else {
