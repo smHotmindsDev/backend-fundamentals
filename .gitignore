@@ -52,3 +52,6 @@ temp/
 lorem-100mb.json
 lorem-500mb.json
 /logs
+
+.obsidian
+.cursor
