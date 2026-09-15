@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      flake_hunt:
+        description: "Run the suite 10 times in a row (flake hunt)"
+        type: boolean
+        default: false
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: library_test
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: "5432"
+  # required by utils/validateEnv.js (legacy Part A demo login)
+  DEMO_JWT: "1"
+  DEMO_USERNAME: ci
+  DEMO_PASSWORD: ci
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: library_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Tests with coverage
+        if: ${{ !inputs.flake_hunt }}
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        if: ${{ !inputs.flake_hunt }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+
+      - name: Flake hunt (10 consecutive runs)
+        if: ${{ inputs.flake_hunt }}
+        run: npm run test:flake
