@@ -65,36 +65,17 @@ Window: `>=` 90 days (a loan exactly 90 days ago **is** included). Books with ze
 
 ### Test fixture (not `../../seed.js`)
 
-Truncate the test database, then insert relative to `CURRENT_DATE` so the 90-day window does not drift.
+Rows live in [`top-books-fixture.json`](./top-books-fixture.json), not in this file.
 
-Deterministic ids — no `gen_random_uuid()` in fixtures (example: `00000000-0000-0000-0000-000000000001`).
+Truncate the test database, then insert that JSON. Deterministic ids — no `gen_random_uuid()` in fixtures. `borrowed_at` values like `CURRENT_DATE - INTERVAL '30 day'` are SQL expressions evaluated at insert time so the 90-day window does not drift.
 
-One author. Loans must satisfy FKs (`author`, `member`, `copy_id`) and the partial unique index on open loans (`copy_id` where `returned_at IS NULL`). Returned loans are enough for this report; many members are not required if every loan is returned.
+`books[].inserted_loans` is a generator spec, not a column: the loader writes that many returned `loans` rows (unique `loan_id` / `idempotency_key`, `due_at > borrowed_at`). `inserted_loans: 0` and `borrowed_at: null` means no loans.
+
+One author, one member. Loans must satisfy FKs (`author`, `member`, `copy_id`) and the partial unique index on open loans (`copy_id` where `returned_at IS NULL`). Returned loans are enough for this report; many members are not required if every loan is returned.
 
 **One `book_copies` row per book is enough**, and every loan of that book points at it. Because each loan here is returned, the partial unique index does not apply, so any number of closed loans may share a single copy. This report never reads availability — copies exist only to satisfy the `copy_id` FK.
 
-**Inserted loan counts vs API counts are different.** Column *inserted_loans* is how many `loans` rows you write. The API returns the count **inside the 90-day window**. Steam House (42 loans at 91 days) and The Mysterious Island (100 at 100 days) therefore appear as `0`.
-
-`borrowed_at` is the interval passed to `CURRENT_DATE - INTERVAL '<n> day'`; `-` means no loans inserted.
-
-```csv
-title,inserted_loans,borrowed_at,book_id,published_at
-Twenty Thousand Leagues,50,30 day,00000000-0000-0000-0000-000000000000,1905-01-01
-Around the World in 80 Days,49,30 day,00000000-0000-0000-0000-000000000001,1905-01-01
-Journey to the Centre of the Earth,48,30 day,00000000-0000-0000-0000-000000000002,1905-01-01
-From the Earth to the Moon,47,30 day,00000000-0000-0000-0000-000000000003,1905-01-01
-Michael Strogoff,46,30 day,00000000-0000-0000-0000-000000000004,1905-01-01
-Five Weeks in a Balloon,45,89 day,00000000-0000-0000-0000-000000000005,1905-01-01
-In Search of the Castaways,44,90 day,00000000-0000-0000-0000-000000000006,1905-01-01
-Robur the Conqueror,44,30 day,00000000-0000-0000-0000-000000000007,1905-01-01
-The Steam House,42,91 day,00000000-0000-0000-0000-000000000008,1905-01-01
-Paris in the Twentieth Century,0,-,00000000-0000-0000-0000-000000000009,1905-01-01
-Around the Moon,0,-,00000000-0000-0000-0000-000000000010,1905-01-01
-The Green Ray,0,-,00000000-0000-0000-0000-000000000011,1905-01-01
-The Mysterious Island,100,100 day,00000000-0000-0000-0000-000000000012,1905-01-01
-```
-
-Author FK on every book: `00000000-0000-0000-0000-000000000000`.
+**Inserted loan counts vs API counts are different.** Field *inserted_loans* is how many `loans` rows you write. The API returns the count **inside the 90-day window**. Steam House (42 loans at 91 days) and The Mysterious Island (100 at 100 days) therefore appear as `0`.
 
 What this fixture is built to break if the query is wrong:
 
