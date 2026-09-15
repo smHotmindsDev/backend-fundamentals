@@ -96,3 +96,34 @@ COMMIT;
 ```
 Return `200` with that row.
 
+### Test fixture (not `../../seed.js`)
+
+Shared with `POST /loans`. Rows live in [`loans-fixture.json`](./loans-fixture.json), not in this file.
+
+Truncate the test database, then insert that JSON. Deterministic ids — no `gen_random_uuid()` in fixtures. `borrowed_at` / `due_at` values like `CURRENT_DATE - 3` are SQL expressions evaluated at insert time so the fixture does not drift.
+
+`unseeded_ids_for_404_tests` are not inserted. `unknown_loan_id` is the `404` case.
+
+What this fixture is built to break if the return is wrong:
+
+- loan `…403` (Returnable Book) is open (`returned_at` is null); first return must set `returned_at` to `CURRENT_DATE`
+- the same `POST` again is a no-op: `200`, `returned_at` unchanged
+- `unknown_loan_id` (`…997`) is not a row → `404`
+
+Open loans `…401` and `…402` belong to the borrow contract. Do not return them in this suite; they exist so the shared fixture stays valid for `POST /loans`.
+
+### Expected response (`200`)
+
+First and second return of `…403` — same body. `returned_at` is the date of the first return.
+
+```json
+{
+  "loan_id": "00000000-0000-0000-0000-000000000403",
+  "member": "00000000-0000-0000-0000-000000000102",
+  "book": "00000000-0000-0000-0000-000000000205",
+  "borrowed_at": "<CURRENT_DATE - 3>",
+  "due_at": "<CURRENT_DATE + 11>",
+  "returned_at": "<CURRENT_DATE>"
+}
+```
+

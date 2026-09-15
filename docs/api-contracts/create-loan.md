@@ -148,3 +148,39 @@ FROM loans
 WHERE idempotency_key = $1;
 ```
 Return `201` with that row.
+
+### Test fixture (not `../../seed.js`)
+
+Shared with `POST /loans/:id/return`. Rows live in [`loans-fixture.json`](./loans-fixture.json), not in this file.
+
+Truncate the test database, then insert that JSON. Deterministic ids — no `gen_random_uuid()` in fixtures. `borrowed_at` / `due_at` values like `CURRENT_DATE - 5` are SQL expressions evaluated at insert time so the fixture does not drift.
+
+`unseeded_ids_for_404_tests` are not inserted.
+
+What this fixture is built to break if the borrow is wrong:
+
+- Available Book (`…201`) — one free copy; Anna (`…101`) borrowing it must `201`
+- Booked Out Book (`…203`) — the only copy is on an open loan; a new borrow must `409`
+- Contested Book (`…202`) — last free copy; two parallel borrows, exactly one `201` and one `409`
+- Multi-Copy Book (`…204`) — one of two copies is already on loan; a new borrow must still `201`
+- `unknown_member_id` / `unknown_book_id` — `404` (member check before book)
+
+Seeded `idempotency_key` values already belong to open loans. A new `POST /loans` sends a fresh UUID v4; that same value is resent only on retry.
+
+### Expected response (`201`)
+
+`loan_id` is generated (`gen_random_uuid()`). `borrowed_at` is `CURRENT_DATE`; `due_at` is `CURRENT_DATE + INTERVAL '2 week'`. Assert those fields, not a copied `loan_id`.
+
+Anna borrows Available Book:
+
+```json
+{
+  "loan_id": "<generated>",
+  "member": "00000000-0000-0000-0000-000000000101",
+  "book": "00000000-0000-0000-0000-000000000201",
+  "borrowed_at": "<CURRENT_DATE>",
+  "due_at": "<CURRENT_DATE + 14 days>"
+}
+```
+
+Retry with the same `Idempotency-Key` returns that same row (`201`).
