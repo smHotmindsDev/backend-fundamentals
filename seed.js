@@ -44,19 +44,20 @@ const NOUNS = [
 ];
 
 const isValidEnv = validateEnv(process.env);
-const env = isValidEnv.env ? isValidEnv.env : null;
 
-if (!env) {
+if (!isValidEnv.success) {
     console.error("Invalid environment; refusing to seed.");
     process.exit(1);
 }
 
+const env = isValidEnv.env;
+
 const client = new Client({
     user: env.POSTGRES_USER,
-    host: "localhost",
+    host: env.POSTGRES_HOST,
     database: env.POSTGRES_DB,
     password: env.POSTGRES_PASSWORD,
-    port: 5432,
+    port: env.POSTGRES_PORT,
 });
 
 function sqlTextArray(values) {

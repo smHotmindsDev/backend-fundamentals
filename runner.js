@@ -4,15 +4,20 @@ import * as path from "node:path";
 import validateEnv from "./utils/validateEnv.js";
 
 const isValidEnv = validateEnv(process.env);
-const env = isValidEnv.env ? isValidEnv.env : null;
-console.log(env);
+
+if (!isValidEnv.success) {
+    console.error('Invalid environment; refusing to migrate.');
+    process.exit(1);
+}
+
+const env = isValidEnv.env;
 
 const client = new Client({
     user: env.POSTGRES_USER,
-    host: 'localhost',
+    host: env.POSTGRES_HOST,
     database: env.POSTGRES_DB,
     password: env.POSTGRES_PASSWORD,
-    port: 5432,
+    port: env.POSTGRES_PORT,
 });
 
 const migration_dir = './migrations';
@@ -87,7 +92,10 @@ async function runMigration() {
             console.log(`❎No files found to be implemented`);
         }
     } catch (err) {
-        console.error('Connection error:', err.stack);
+        // A failed migration must fail the process: callers (npm scripts,
+        // tests/setup/global.js) rely on the exit code, not on stdout.
+        console.error('Migration failed:', err.stack);
+        process.exitCode = 1;
     } finally {
         await client.end(); // Must manually close connection
     }
