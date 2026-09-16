@@ -31,7 +31,7 @@ After each individual callback from the macrotask queue, the entire microtask qu
 ### Result
 Client-side logs:
 ```zsh
-martin@Mac backend-fundamentals % node event-loop-test.js
+martin@Mac backend-fundamentals % node event-loop-test.old.js
 json-parse done at +187ms
 await-timer done at +5190ms
 ```
@@ -72,7 +72,7 @@ In general, the behavior coincides with the expected one:
 
 CommonJS Logs:
 ```aiignore
-martin@Mac backend-fundamentals % node event-loop-test.cjs
+martin@Mac backend-fundamentals % node event-loop-test.old.cjs
 Second Test START on Wed Aug 26 2026 23:04:47 GMT+0300 (Eastern European Summer Time)
 Second Test within an I/O cycle START on Wed Aug 26 2026 23:04:47 GMT+0300 (Eastern European Summer Time)
 nextTick done at 5ms
@@ -87,7 +87,7 @@ Timeout (I/O) done at 26ms
 
 ESM Logs:
 ```aiignore
-martin@Mac backend-fundamentals % node event-loop-test.js
+martin@Mac backend-fundamentals % node event-loop-test.old.js
 Second Test START on Wed Aug 26 2026 23:06:26 GMT+0300 (Eastern European Summer Time)
 Second Test within an I/O cycle START on Wed Aug 26 2026 23:06:26 GMT+0300 (Eastern European Summer Time)
 Resolved Promise done at 4ms
@@ -112,7 +112,7 @@ const promize = new Promise((resolve, reject) => {
 ```
 Console:
 ```
-martin@Mac backend-fundamentals % node event-loop-test.js
+martin@Mac backend-fundamentals % node event-loop-test.old.js
 Second Test START on Wed Aug 26 2026 22:56:09 GMT+0300 (Eastern European Summer Time)
 Resolved Promise done at 4ms
 Second Test within an I/O cycle START on Wed Aug 26 2026 22:56:09 GMT+0300 (Eastern European Summer Time)
@@ -140,7 +140,7 @@ The `streams` process downloaded the file asynchronously in 64 KB chunks, so the
 
 Stream logs:
 ```aiignore
-martin@Mac backend-fundamentals % node event-loop-test.js
+martin@Mac backend-fundamentals % node event-loop-test.old.js
 Thirty Test START on Thu Aug 27 2026 00:31:36 GMT+0300 (Eastern European Summer Time)
 read-sync start at 1787779896442ms
 read-sync done at +965ms

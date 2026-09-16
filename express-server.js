@@ -6,17 +6,17 @@
 
 import express from 'express';
 import * as fs from 'node:fs';
-import logger from "./utils/logger.js";
-import validateUserMiddleware from "./utils/validateUserMiddleware.js";
-import validateEnv from "./utils/validateEnv.js";
-import requestLoggerMiddleware from "./utils/requestLoggerMiddleware.js";
-import authMiddleware from "./utils/authMiddleware.js";
-import routeNotFoundHandler from "./utils/routeNotFoundHandler.js";
-import errorHandlerMiddleware from "./utils/errorHandlerMiddleware.js";
-import validateLoremJsonMiddleware from "./utils/validateLoremJsonMiddleware.js";
-import ServerError from "./utils/ServerError.js";
-import readFileSyncMiddleware from "./utils/readFileSyncMiddleware.js";
-import readStreamMiddleware from "./utils/readStreamMiddleware.js";
+import logger from "./src/utils/logger.js";
+import validateUserMiddleware from "./src/utils/validateUserMiddleware.js";
+import validateEnv from "./src/utils/validateEnv.js";
+import requestLoggerMiddleware from "./src/utils/requestLoggerMiddleware.js";
+import authMiddleware from "./src/utils/authMiddleware.js";
+import routeNotFoundHandler from "./src/utils/routeNotFoundHandler.js";
+import errorHandlerMiddleware from "./src/utils/errorHandlerMiddleware.js";
+import validateLoremJsonMiddleware from "./src/utils/validateLoremJsonMiddleware.js";
+import ServerError from "./src/utils/ServerError.js";
+import readFileSyncMiddleware from "./src/utils/readFileSyncMiddleware.js";
+import readStreamMiddleware from "./src/utils/readStreamMiddleware.js";
 
 const app = express();
 const port = 8000;

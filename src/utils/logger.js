@@ -6,7 +6,8 @@ const logger = pino(
             {
                 target: 'pino/file',
                 level: 'debug',
-                options: { destination: './logs/error.json', append: true }
+                // mkdir: logs/ is gitignored, so a fresh checkout (CI) has no such folder
+                options: { destination: './logs/error.json', append: true, mkdir: true }
             },
             {
                 target: 'pino-pretty',

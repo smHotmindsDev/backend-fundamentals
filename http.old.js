@@ -1,4 +1,4 @@
-import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEFAULT_MAX_AGE, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.js";
+import { HOSTNAME, PORT, MIME_TYPES, STATUS_CODES, DEFAULT_MAX_AGE, DEMO_USER_NAME, DEMO_USER_PASSWORD } from "./options.old.js";
 
 const option = {
   basePath: `${HOSTNAME}:${PORT}`,
