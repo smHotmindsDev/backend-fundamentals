@@ -17,10 +17,8 @@ env:
   POSTGRES_DB: library_test
   POSTGRES_HOST: localhost
   POSTGRES_PORT: "5432"
-  # required by utils/validateEnv.js (legacy Part A demo login)
-  DEMO_JWT: "1"
-  DEMO_USERNAME: ci
-  DEMO_PASSWORD: ci
+  # required by utils/validateEnv.js
+  API_KEY: ci-test-key
 
 jobs:
   test:
