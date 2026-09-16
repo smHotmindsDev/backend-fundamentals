@@ -1,5 +1,5 @@
 import { Client } from "pg";
-import validateEnv from "./utils/validateEnv.js";
+import validateEnv from "./src/utils/validateEnv.js";
 
 const AUTHORS = 5_000;
 const UNBORROWED_AUTHORS = 200;

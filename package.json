@@ -1,8 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=production node --env-file=.env.production app.js",
-    "dev": "NODE_ENV=development nodemon --env-file=.env.development app.js",
+    "start": "NODE_ENV=production node --env-file=.env.production app.old.js",
+    "dev": "NODE_ENV=development nodemon --env-file=.env.development app.old.js",
     "server": "NODE_ENV=production node --env-file=.env.production express-server.js",
     "server:dev": "NODE_ENV=development nodemon --env-file=.env.development express-server.js",
     "migrate": "node --env-file=.env.production runner.js",
