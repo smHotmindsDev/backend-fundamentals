@@ -1,7 +1,7 @@
 import {Client} from "pg";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import validateEnv from "./utils/validateEnv.js";
+import validateEnv from "./src/utils/validateEnv.js";
 
 const isValidEnv = validateEnv(process.env);
 

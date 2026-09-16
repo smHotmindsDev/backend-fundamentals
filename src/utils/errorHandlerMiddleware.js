@@ -13,8 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import ServerError from './ServerError.js';
 import logger from './logger.js';
-
-const REQUEST_ID_HEADER = 'X-Request-Id';
+import { REQUEST_ID_HEADER } from './requestLoggerMiddleware.js';
 
 // body-parser (express.json) rejects unparseable JSON with this `type`.
 // The envelope maps it to 422 validation_error, the only case with `details`.

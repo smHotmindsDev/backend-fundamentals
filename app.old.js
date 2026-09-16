@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
-import logger from './utils/logger.js';
-import validateEnv from "./utils/validateEnv.js";
+import logger from './src/utils/logger.js';
+import validateEnv from "./src/utils/validateEnv.js";
 
 const isValidEnv = validateEnv(process.env);
 const env = isValidEnv.env ? isValidEnv.env : null;

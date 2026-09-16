@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import pinoHttp from 'pino-http';
 import logger from './logger.js';
 
-const REQUEST_ID_HEADER = 'X-Request-Id';
+export const REQUEST_ID_HEADER = 'X-Request-Id';
 
 const levelFor = (res, err) => {
     if (err || res.statusCode >= 500) return 'error';
