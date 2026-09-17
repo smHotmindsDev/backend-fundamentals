@@ -176,8 +176,8 @@ Anna borrows Available Book:
 ```json
 {
   "loan_id": "<generated>",
-  "member": "00000000-0000-0000-0000-000000000101",
-  "book": "00000000-0000-0000-0000-000000000201",
+  "member": "00000000-0000-4000-8000-000000000101",
+  "book": "00000000-0000-4000-8000-000000000201",
   "borrowed_at": "<CURRENT_DATE>",
   "due_at": "<CURRENT_DATE + 14 days>"
 }
