@@ -51,7 +51,7 @@ for (const name of ['pagination', 'top-books', 'loans']) {
 
 test('date columns come back as YYYY-MM-DD strings and match the frozen clock', async () => {
     await loadFixture(pool, 'loans');
-    const { rows } = await pool.query(`SELECT borrowed_at, due_at FROM loans WHERE loan_id = $1`, ['00000000-0000-0000-0000-000000000403']);
+    const { rows } = await pool.query(`SELECT borrowed_at, due_at FROM loans WHERE loan_id = $1`, ['00000000-0000-4000-8000-000000000403']);
     assert.deepEqual(rows[0], { borrowed_at: addDays(TEST_TODAY, -3), due_at: addDays(TEST_TODAY, 11) });
 });
 

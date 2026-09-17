@@ -118,9 +118,9 @@ First and second return of `…403` — same body. `returned_at` is the date of 
 
 ```json
 {
-  "loan_id": "00000000-0000-0000-0000-000000000403",
-  "member": "00000000-0000-0000-0000-000000000102",
-  "book": "00000000-0000-0000-0000-000000000205",
+  "loan_id": "00000000-0000-4000-8000-000000000403",
+  "member": "00000000-0000-4000-8000-000000000102",
+  "book": "00000000-0000-4000-8000-000000000205",
   "borrowed_at": "<CURRENT_DATE - 3>",
   "due_at": "<CURRENT_DATE + 11>",
   "returned_at": "<CURRENT_DATE>"
