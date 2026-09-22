@@ -1,6 +1,6 @@
 import { Router } from 'express';
-export const router = Router();
+export const topBooksRouter = Router();
 
-router.get('/reports/top-books', async (req, res) => {
+topBooksRouter.get('/', async (req, res) => {
     res.json({ message: "Hello from a factory-generated route!" });
 });
