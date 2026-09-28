@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import ServerError from "../utils/ServerError.js";
-import {loansBodySchema} from "../schemas/loans.js";
+import {loansBodySchema, loansHeaderSchema} from "../schemas/loans.js";
 export const loansRouter = Router();
 
 const valueAt = (input, path) => path.reduce((current, key) => current?.[key], input);
@@ -94,17 +94,27 @@ async function borrow(client, {member, book, idempotencyKey}) {
 }
 
 loansRouter.post('/', async (req, res, next) => {
-    // The data sent from the client lives inside req.body
-    const member = req.body.member;
-    const book = req.body.book;
-    const idempotencyKey = req.headers['idempotency-key'];
-    const bodyData = { member, book, idempotencyKey };
+    // The data sent from the client lives inside req.headers['idempotency-key'] and req.body
+    const headerInput = {
+        idempotencyKey: req.headers['idempotency-key']
+    };
+    const bodyInput = req.body;
 
-    const validBodyData = loansBodySchema.safeParse(bodyData);
-
-    if (!validBodyData.success) {
-        throw ServerError.validation('Validation failed', validationDetails(validBodyData.error.issues, bodyData));
+    const validHeader = loansHeaderSchema.safeParse(headerInput);
+    const validBody = loansBodySchema.safeParse(bodyInput);
+    const details = [];
+    if (!validHeader.success) {
+        details.push(...validationDetails(validHeader.error.issues, headerInput));
     }
+    if (!validBody.success) {
+        details.push(...validationDetails(validBody.error.issues, bodyInput));
+    }
+    if (details.length > 0) {
+        throw ServerError.validation('Validation failed', details);
+    }
+
+    const { idempotencyKey } = validHeader.data;
+    const { member, book } = validBody.data;
 
     const client = await req.db.connect();
 

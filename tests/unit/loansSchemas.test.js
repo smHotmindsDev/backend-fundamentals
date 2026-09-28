@@ -1,6 +1,6 @@
 import { test, describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {loansBodySchema} from "../../src/schemas/loans.js";
+import {loansHeaderSchema, loansBodySchema} from "../../src/schemas/loans.js";
 
 const memberId = "00000000-0000-4000-8000-000000000102";
 const bookId = "00000000-0000-4000-8000-000000000205";
@@ -8,12 +8,15 @@ const idempotencyKey = "00000000-0000-4000-8000-000000000009";
 
 // Every invalid case is complete except for the one field under test, so the
 // parse fails for the reason in the case name and for nothing else.
-const valid = { member: memberId, book: bookId, idempotencyKey };
+const valid = { member: memberId, book: bookId };
+const validHeader = { idempotencyKey };
 
-describe('loansBodySchema validation via node:test', () => {
+describe('loansSchemas validation via node:test', () => {
     describe('Happy path', () => {
         test('POST /loans body { member: uuid, book: uuid } + Idempotency-Key uuid parses', () => {
+            const headerRes = loansHeaderSchema.safeParse(validHeader)
             const res = loansBodySchema.safeParse(valid);
+            assert.equal(headerRes.success, true, headerRes.error?.message);
             assert.equal(res.success, true, res.error?.message);
         })
 
@@ -29,15 +32,22 @@ describe('loansBodySchema validation via node:test', () => {
         ];
 
         const invalidKey = [
-            ['Idempotency-Key missing',      { ...valid, idempotencyKey: undefined }],
-            ['Idempotency-Key wrong type',   { ...valid, idempotencyKey: 123 }],
-            ['Idempotency-Key not a uuid',   { ...valid, idempotencyKey: 'not-a-uuid' }],
+            ['Idempotency-Key missing',      { idempotencyKey: undefined }],
+            ['Idempotency-Key empty string', { idempotencyKey: '' }],
+            ['Idempotency-Key not a uuid',   { idempotencyKey: 'not-a-uuid' }],
             // Valid RFC 4122 layout but version 1: the client must send v4.
-            ['Idempotency-Key uuid v1',      { ...valid, idempotencyKey: '00000000-0000-1000-8000-000000000009' }],
+            ['Idempotency-Key uuid v1',      { idempotencyKey: '00000000-0000-1000-8000-000000000009' }],
         ];
 
         const assertInvalidField = (input, field) => {
             const res = loansBodySchema.safeParse(input);
+            assert.equal(res.success, false);
+            const fields = res.error.issues.map((issue) => issue.path.join('.'));
+            assert.ok(fields.includes(field), `expected an issue on "${field}", got: ${fields.join(', ') || 'none'}`);
+        };
+
+        const assertInvalidFieldInHeader = (input, field) => {
+            const res = loansHeaderSchema.safeParse(input);
             assert.equal(res.success, false);
             const fields = res.error.issues.map((issue) => issue.path.join('.'));
             assert.ok(fields.includes(field), `expected an issue on "${field}", got: ${fields.join(', ') || 'none'}`);
@@ -49,9 +59,9 @@ describe('loansBodySchema validation via node:test', () => {
             }
         })
 
-        test('POST /loans Idempotency-Key missing, wrong type or not a uuid v4 → invalid', () => {
-            for (const [name, body] of invalidKey) {
-                test(`POST /loans: ${name} → invalid`, () => assertInvalidField(body, 'idempotencyKey'));
+        test('POST /loans Idempotency-Key missing, empty string or not a uuid v4 → invalid', () => {
+            for (const [name, header] of invalidKey) {
+                test(`POST /loans: ${name} → invalid`, () => assertInvalidFieldInHeader(header, 'idempotencyKey'));
             }
         })
     });
