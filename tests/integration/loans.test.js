@@ -5,6 +5,16 @@ import assert from "node:assert/strict";
 import {addDays} from "../helpers/clock.js";
 
 const pool = createTestPool();
+
+async function callToCreate (post, bodyData, idempotencyKey) {
+    return await post(
+        '/loans',
+        bodyData,
+        {
+            'Idempotency-Key': idempotencyKey
+        });
+}
+
 describe('POST /loans — transactional borrow', () => {
     describe('Happy path' , () => {
         test('Anna + Available Book, fresh Idempotency-Key returns 201 and creates loans row with correct fields', async (t) => {
@@ -22,12 +32,7 @@ describe('POST /loans — transactional borrow', () => {
             const dueAt = addDays(today, 14);
 
             // Act: exactly one call — this is the behaviour under test
-            const res = await post(
-                '/loans',
-                bodyData,
-                {
-                    'Idempotency-Key': idempotencyKey
-                }); // post already adds Content-Type: application/json and a valid X-API-Key.
+            const res = await callToCreate(post, bodyData, idempotencyKey);
 
             // Assert 1: the HTTP contract
             assert.equal(res.status, 201);
@@ -53,7 +58,8 @@ describe('POST /loans — transactional borrow', () => {
             const { rows: idempotencyRows } = await pool.query('SELECT loan_id FROM loans WHERE idempotency_key = $1', [idempotencyKey]);
             assert.equal(idempotencyRows.length, 1, 'exactly one row per idempotency key');
         })
-        test.todo('Same call repeated with same Idempotency-Key returns 201 with same loan_id, no second row inserted')
+
+        test.todo('Same call repeated with same Idempotency-Key returns 201 with same loan_id, no second row inserted');
         test.todo('Parallel calls with Anna, Available Book, same Idempotency-Key both return 201 with identical loan_id, only one row inserted')
         test.todo('Anna + Multi-Copy Book (one copy already on loan) uses free copy, not already-loaned copy')
     })
@@ -63,7 +69,52 @@ describe('POST /loans — transactional borrow', () => {
         test.todo('Booked out book (no available copy) returns 409 conflict with appropriate message')
         test.todo('Invalid Content-Type returns 400 bad_request')
         test.todo('Malformed body (member/book missing or wrong type) returns 422 validation_error with details')
-        test.todo('Missing or non-uuid Idempotency-Key header with a valid body returns 422 validation_error with details field Idempotency-Key, no row inserted')
+        test(
+            'Missing or non-uuid-v4 Idempotency-Key header with a valid body returns 422 validation_error with details field Idempotency-Key, no row inserted',
+            async (t) => {
+                // Arrange: server on the real test DB, a body that is valid on its own
+                const fixture = await loadFixture(pool, 'loans');
+                const { post } = await startServer(t, { dbClient: pool });
+                const member = fixture.members.find(m => m.first_name === 'Anna').member_id;
+                const book = fixture.books.find(b => b.title === 'Available Book').book_id;
+                const bodyData = { member, book };
+
+                // A missing key can't be looked up by key, so compare the table size instead
+                const countLoans =
+                    async () =>
+                        (await pool.query('SELECT count(*)::int AS n FROM loans')).rows[0].n;
+                const loansBefore = await countLoans();
+
+                const cases = [
+                    ['missing',               undefined],
+                    ['empty string',          ''],
+                    ['not a uuid',            'not-a-uuid'],
+                    // Valid RFC 4122 layout but version 1: the client must send v4
+                    ['uuid v1 instead of v4', '00000000-0000-1000-8000-000000000009'],
+                ];
+
+                for (const [label, idempotencyKey] of cases) {
+                    await t.test(label, async () => {
+                        // Act: exactly one call
+                        const res = await callToCreate(post, bodyData, idempotencyKey);
+
+                        // Assert 1: the HTTP contract
+                        assert.equal(res.status, 422);
+                        const body = await res.json();
+                        assert.equal(body.error, 'validation_error');
+                        assert.ok(Array.isArray(body.details), 'details must be an array');
+                        assert.ok(
+                            body.details.some(d => d.field === 'Idempotency-Key'),
+                            `details must name Idempotency-Key, got ${JSON.stringify(body.details)}`
+                        );
+                        assert.equal('loan_id' in body, false, 'an error response carries no loan');
+
+                        // Assert 2: the database did not change
+                        assert.equal(await countLoans(), loansBefore, 'no row inserted');
+                    });
+                }
+            }
+        );
     })
 })
 

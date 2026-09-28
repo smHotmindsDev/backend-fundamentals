@@ -59,7 +59,7 @@ Authorization is described in a separate document.
 - `404` — `Member with id:$1 undefined`
 - `404` — `Book with id:$1 undefined`
 - `409` — `copy already taken, conflict`
-- `422` — Validation failed — invalid request body (syntax, data types, required fields)
+- `422` — Validation failed — invalid request body (syntax, data types, required fields) or idempotency key in header (details[].field = "Idempotency-Key")
 - `500` — Internal Server Error — server-side errors
 
 ## Side effects

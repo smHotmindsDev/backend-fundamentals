@@ -40,7 +40,7 @@ Here: pagination math, rate-limiter logic, validation schemas.
   - `GET /books?page=0`, `page=-1`, `page=abc`, `page=1.5` => invalid page (not a positive integer)
   - `GET /books?per_page=0`, `per_page=-1`, `per_page=abc`, `per_page=1.5` → invalid per_page (not a positive integer)
   - `POST /loans` body: `member` / `book` missing or wrong type → invalid (HTTP mapping is integration `422`)
-  - `POST /loans` `Idempotency-Key` missing, wrong type, not a uuid, or uuid v1 → invalid on field `idempotencyKey` (HTTP mapping is integration `422` with `details[].field = "Idempotency-Key"`). Each invalid case keeps the other fields valid, so it fails only for the reason in its name
+  - `POST /loans` `Idempotency-Key` missing, empty string, not a uuid, or uuid v1 → invalid on field `idempotencyKey` (HTTP mapping is integration `422` with `details[].field = "Idempotency-Key"`). Each invalid case keeps the other fields valid, so it fails only for the reason in its name
 
 ## Integration
 
@@ -196,7 +196,7 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
   - Booked Out Book (book: ...203), without an available copy => `409` `conflict` : `copy already taken, conflict`
   - invalid `Content-Type` => `400` `bad_request`
   - malformed body (`member`/`book` missing or wrong type) => `422` `validation_error` with `details`
-  - missing or non-uuid `Idempotency-Key` header, valid body => `422` `validation_error` with `details[].field = "Idempotency-Key"` — assert no `loans` row inserted
+  - missing or non-uuid-v4 `Idempotency-Key` header, valid body => `422` `validation_error` with `details[].field = "Idempotency-Key"` — assert no `loans` row inserted
 
 ### `POST /loans` — double-borrow race
 
