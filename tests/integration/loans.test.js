@@ -15,6 +15,10 @@ async function callToCreate (post, bodyData, idempotencyKey) {
         });
 }
 
+const countLoans =
+    async () =>
+        (await pool.query('SELECT count(*)::int AS n FROM loans')).rows[0].n;
+
 describe('POST /loans — transactional borrow', () => {
     describe('Happy path' , () => {
         test('Anna + Available Book, fresh Idempotency-Key returns 201 and creates loans row with correct fields', async (t) => {
@@ -59,7 +63,28 @@ describe('POST /loans — transactional borrow', () => {
             assert.equal(idempotencyRows.length, 1, 'exactly one row per idempotency key');
         })
 
-        test.todo('Same call repeated with same Idempotency-Key returns 201 with same loan_id, no second row inserted');
+        test('Same call repeated with same Idempotency-Key returns 201 with same loan_id, no second row inserted', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const member = fixture.members.find(m => m.first_name === 'Anna').member_id;
+            const book = fixture.books.find(b => b.title === 'Available Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+            const bodyData = {member, book};
+
+            // Act: exactly one call — this is the behaviour under test
+            const resFirst = await callToCreate(post, bodyData, idempotencyKey);
+            const loansBefore = await countLoans();
+            const bodyBefore = await resFirst.json();
+            const resSecond = await callToCreate(post, bodyData, idempotencyKey);
+            const loansAfter = await countLoans();
+            const bodyAfter = await resSecond.json();
+
+            assert.equal(resFirst.status, 201, 'First call returns 201');
+            assert.equal(resSecond.status, 201, 'Second call returns 201');
+            assert.deepEqual(bodyAfter, bodyBefore, 'The same request, repeated with the same Idempotency-Key, returns the same response.');
+            assert.equal(loansAfter, loansBefore, 'Same call repeated with same Idempotency-Key no second row inserted');
+        });
         test.todo('Parallel calls with Anna, Available Book, same Idempotency-Key both return 201 with identical loan_id, only one row inserted')
         test.todo('Anna + Multi-Copy Book (one copy already on loan) uses free copy, not already-loaned copy')
     })
@@ -80,9 +105,6 @@ describe('POST /loans — transactional borrow', () => {
                 const bodyData = { member, book };
 
                 // A missing key can't be looked up by key, so compare the table size instead
-                const countLoans =
-                    async () =>
-                        (await pool.query('SELECT count(*)::int AS n FROM loans')).rows[0].n;
                 const loansBefore = await countLoans();
 
                 const cases = [
