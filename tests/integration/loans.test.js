@@ -19,6 +19,10 @@ const countLoans =
     async () =>
         (await pool.query('SELECT count(*)::int AS n FROM loans')).rows[0].n;
 
+const getCopy =
+    async (loanId) =>
+        (await pool.query('SELECT copy_id FROM loans WHERE loan_id = $1', [loanId])).rows[0].copy_id;
+
 describe('POST /loans — transactional borrow', () => {
     describe('Happy path' , () => {
         test('Anna + Available Book, fresh Idempotency-Key returns 201 and creates loans row with correct fields', async (t) => {
@@ -115,7 +119,32 @@ describe('POST /loans — transactional borrow', () => {
             assert.deepEqual(bodyB, bodyA, 'Both calls return the same response body');
             assert.equal(loansAfter, loansBefore + 1, 'Exactly one loan row inserted');
         });
-        test.todo('Anna + Multi-Copy Book (one copy already on loan) uses free copy, not already-loaned copy')
+        test('Anna + Multi-Copy Book (one copy already on loan) uses free copy, not already-loaned copy', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const member = fixture.members.find(m => m.first_name === 'Anna').member_id;
+            const book = fixture.books.find(b => b.title === 'Multi-Copy Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+            const bodyData = { member, book };
+
+            // Arrange: the copy already on loan in the fixture, and the free copy expected to be picked
+            const loanedCopy = fixture.loans.find(l => l.book === book).copy_id;
+            const { copy_id: freeCopy } = fixture.book_copies.find(c => c.book_id === book && c.copy_id !== loanedCopy);
+
+            // Act: create a loan for the book (not a specific copy), the server picks the copy
+            const res = await callToCreate(post, bodyData, idempotencyKey);
+            assert.equal(res.status, 201, 'Call returns 201');
+
+            // Act: read back which copy the created loan actually got
+            const body = await res.json();
+            const loanId = body.loan_id;
+            const copyId = await getCopy(loanId);
+
+            // Assert: the server skipped the loaned copy and took the free one
+            assert.notStrictEqual(copyId, loanedCopy, 'Anna + Multi-Copy Book doesn\'t use already-loaned copy');
+            assert.equal(copyId, freeCopy, 'Anna + Multi-Copy Book uses free copy');
+        });
     })
     describe('Error / edge', () => {
         test.todo('Unknown member_id returns 404 not_found with appropriate error message')
