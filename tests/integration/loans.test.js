@@ -72,7 +72,7 @@ describe('POST /loans — transactional borrow', () => {
             const idempotencyKey = crypto.randomUUID();
             const bodyData = {member, book};
 
-            // Act: exactly one call — this is the behaviour under test
+            // Act: two consecutive calls — this is the behavior subject to testing.
             const resFirst = await callToCreate(post, bodyData, idempotencyKey);
             const loansBefore = await countLoans();
             const bodyBefore = await resFirst.json();
@@ -85,7 +85,36 @@ describe('POST /loans — transactional borrow', () => {
             assert.deepEqual(bodyAfter, bodyBefore, 'The same request, repeated with the same Idempotency-Key, returns the same response.');
             assert.equal(loansAfter, loansBefore, 'Same call repeated with same Idempotency-Key no second row inserted');
         });
-        test.todo('Parallel calls with Anna, Available Book, same Idempotency-Key both return 201 with identical loan_id, only one row inserted')
+        test('Parallel calls with the same Idempotency-Key for Anna and Available Book: both return 201 with the same loan_id, one row inserted', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const member = fixture.members.find(m => m.first_name === 'Anna').member_id;
+            const book = fixture.books.find(b => b.title === 'Available Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+            const bodyData = { member, book };
+
+            // Arrange: baseline count before any request is in flight.
+            const loansBefore = await countLoans();
+
+            // Act: two parallel calls with the same idempotency key.
+            const [resA, resB] = await Promise.all([
+                callToCreate(post, bodyData, idempotencyKey),
+                callToCreate(post, bodyData, idempotencyKey),
+            ]);
+
+            const [bodyA, bodyB] = await Promise.all([
+                resA.json(),
+                resB.json(),
+            ]);
+
+            const loansAfter = await countLoans();
+
+            assert.equal(resA.status, 201, 'Call A returns 201');
+            assert.equal(resB.status, 201, 'Call B returns 201');
+            assert.deepEqual(bodyB, bodyA, 'Both calls return the same response body');
+            assert.equal(loansAfter, loansBefore + 1, 'Exactly one loan row inserted');
+        });
         test.todo('Anna + Multi-Copy Book (one copy already on loan) uses free copy, not already-loaned copy')
     })
     describe('Error / edge', () => {
