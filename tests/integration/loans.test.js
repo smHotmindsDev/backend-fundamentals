@@ -371,7 +371,58 @@ describe('POST /loans — transactional borrow', () => {
 
 describe('POST /loans — double-borrow race', () => {
     describe('Happy path', () => {
-        test.todo('Parallel calls from Anna and Boris to contested book: exactly one 201 (with loans row), one 409, only one open loan and correct member')
+        test('Parallel calls from Anna and Boris to contested book: exactly one 201 (with loans row), one 409, only one open loan and correct member', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const memberA = fixture.members.find(m => m.first_name === 'Anna').member_id;
+            const memberB = fixture.members.find(m => m.first_name === 'Boris').member_id;
+            const book = fixture.books.find(b => b.title === 'Contested Book').book_id;
+            const idempotencyKeyA = crypto.randomUUID();
+            const idempotencyKeyB = crypto.randomUUID();
+            const bodyDataA = { member: memberA, book };
+            const bodyDataB = { member: memberB, book };
+
+            // Arrange: baseline count before any request is in flight.
+            const loansBefore = await countLoans();
+
+            // Act: two parallel calls with different idempotency keys.
+            const [resA, resB] = await Promise.all([
+                callToCreate(post, bodyDataA, idempotencyKeyA),
+                callToCreate(post, bodyDataB, idempotencyKeyB),
+            ]);
+            const bodyA = await resA.json();
+            const bodyB = await resB.json();
+
+            const loansAfter = await countLoans();
+
+            const responses = [
+                {
+                    status: resA.status, body: bodyA, member: memberA
+                },
+                {
+                    status: resB.status, body: bodyB, member: memberB
+                }
+            ]
+
+            const successResponse = responses.find(r => r.status === 201);
+            const conflictResponse = responses.find(r => r.status === 409);
+
+            assert.ok(successResponse, 'One call returns 201');
+            assert.ok(conflictResponse, 'One call returns 409');
+            assert.equal(loansAfter, loansBefore + 1, 'Exactly one loan row inserted');
+
+            const resLoan = (await pool.query('SELECT loan_id FROM loans WHERE book = $1 AND returned_at IS NULL ORDER BY loan_id', [book])).rows;
+            const successLoan = resLoan[0].loan_id;
+            const successMember = (await pool.query('SELECT member FROM loans WHERE loan_id = $1', [successLoan])).rows[0].member;
+            const count = resLoan.length;
+
+            assert.equal(count, 1, 'Only one open loan');
+            assert.equal(successResponse.body.loan_id, successLoan, 'loan_id in the 201 response matches the open loan in DB');
+            assert.equal(conflictResponse.body.error, 'conflict', 'One call returns conflict');
+            assert.equal(conflictResponse.body.message, `copy already taken, conflict`, 'One call returns appropriate message: copy already taken, conflict');
+            assert.equal(successResponse.member, successMember, 'Correct member');
+        })
     })
     // error/edge: n/a as noted
 })
