@@ -94,6 +94,11 @@ async function borrow(client, {member, book, idempotencyKey}) {
 }
 
 loansRouter.post('/', async (req, res, next) => {
+    const headerContentType = req.headers['content-type'];
+    if (headerContentType !== 'application/json') {
+        throw ServerError.badRequest();
+    }
+
     // The data sent from the client lives inside req.headers['idempotency-key'] and req.body
     const headerInput = {
         idempotencyKey: req.headers['idempotency-key']
