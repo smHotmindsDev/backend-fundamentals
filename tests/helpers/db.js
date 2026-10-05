@@ -21,7 +21,7 @@ export function testDbConfig(env = process.env) {
     if (!database || !database.endsWith('_test')) {
         throw new Error(
             `Refusing to touch database "${database}": test database names must end with "_test". ` +
-            `Check .env.test (POSTGRES_DB).`,
+                `Check .env.test (POSTGRES_DB).`,
         );
     }
     return {
@@ -142,10 +142,7 @@ async function insertRows(client, table, rowsForTable) {
         });
         return `(${placeholders.join(', ')})`;
     });
-    await client.query(
-        `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`,
-        values,
-    );
+    await client.query(`INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`, values);
 }
 
 /**

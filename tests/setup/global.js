@@ -27,7 +27,9 @@ async function ensureDatabase(config) {
 }
 
 async function verifyMigrations(config) {
-    const expected = readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
+    const expected = readdirSync('migrations')
+        .filter((f) => f.endsWith('.sql'))
+        .sort();
     const client = new Client(config);
     await client.connect();
     try {

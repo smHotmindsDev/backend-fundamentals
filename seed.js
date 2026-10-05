@@ -1,5 +1,5 @@
-import { Client } from "pg";
-import validateEnv from "./src/utils/validateEnv.js";
+import { Client } from 'pg';
+import validateEnv from './src/utils/validateEnv.js';
 
 const AUTHORS = 5_000;
 const UNBORROWED_AUTHORS = 200;
@@ -10,43 +10,181 @@ const UNBORROWED_BOOKS = 2_000;
 const LOANS = 500_000;
 
 const FIRST_NAMES = [
-    "James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda",
-    "David", "Elizabeth", "William", "Barbara", "Richard", "Susan", "Joseph", "Jessica",
-    "Thomas", "Sarah", "Christopher", "Karen", "Charles", "Lisa", "Daniel", "Nancy",
-    "Matthew", "Betty", "Anthony", "Margaret", "Mark", "Sandra", "Donald", "Ashley",
-    "Steven", "Kimberly", "Paul", "Emily", "Andrew", "Donna", "Joshua", "Michelle",
-    "Kenneth", "Dorothy", "Kevin", "Carol", "Brian", "Amanda", "George", "Melissa",
-    "Timothy", "Deborah",
+    'James',
+    'Mary',
+    'Robert',
+    'Patricia',
+    'John',
+    'Jennifer',
+    'Michael',
+    'Linda',
+    'David',
+    'Elizabeth',
+    'William',
+    'Barbara',
+    'Richard',
+    'Susan',
+    'Joseph',
+    'Jessica',
+    'Thomas',
+    'Sarah',
+    'Christopher',
+    'Karen',
+    'Charles',
+    'Lisa',
+    'Daniel',
+    'Nancy',
+    'Matthew',
+    'Betty',
+    'Anthony',
+    'Margaret',
+    'Mark',
+    'Sandra',
+    'Donald',
+    'Ashley',
+    'Steven',
+    'Kimberly',
+    'Paul',
+    'Emily',
+    'Andrew',
+    'Donna',
+    'Joshua',
+    'Michelle',
+    'Kenneth',
+    'Dorothy',
+    'Kevin',
+    'Carol',
+    'Brian',
+    'Amanda',
+    'George',
+    'Melissa',
+    'Timothy',
+    'Deborah',
 ];
 
 const LAST_NAMES = [
-    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
-    "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas",
-    "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White",
-    "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young",
-    "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
-    "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell",
-    "Carter", "Roberts",
+    'Smith',
+    'Johnson',
+    'Williams',
+    'Brown',
+    'Jones',
+    'Garcia',
+    'Miller',
+    'Davis',
+    'Rodriguez',
+    'Martinez',
+    'Hernandez',
+    'Lopez',
+    'Gonzalez',
+    'Wilson',
+    'Anderson',
+    'Thomas',
+    'Taylor',
+    'Moore',
+    'Jackson',
+    'Martin',
+    'Lee',
+    'Perez',
+    'Thompson',
+    'White',
+    'Harris',
+    'Sanchez',
+    'Clark',
+    'Ramirez',
+    'Lewis',
+    'Robinson',
+    'Walker',
+    'Young',
+    'Allen',
+    'King',
+    'Wright',
+    'Scott',
+    'Torres',
+    'Nguyen',
+    'Hill',
+    'Flores',
+    'Green',
+    'Adams',
+    'Nelson',
+    'Baker',
+    'Hall',
+    'Rivera',
+    'Campbell',
+    'Mitchell',
+    'Carter',
+    'Roberts',
 ];
 
 const ADJECTIVES = [
-    "Silent", "Hidden", "Broken", "Golden", "Empty", "Ancient", "Quiet", "Bright",
-    "Forgotten", "Crystal", "Lonely", "Frozen", "Secret", "Narrow", "Wild", "Pale",
-    "Distant", "Iron", "Gentle", "Shattered", "Velvet", "Hollow", "Burning", "Still",
-    "Endless", "Fading", "Silver", "Crooked", "Deep", "Northern",
+    'Silent',
+    'Hidden',
+    'Broken',
+    'Golden',
+    'Empty',
+    'Ancient',
+    'Quiet',
+    'Bright',
+    'Forgotten',
+    'Crystal',
+    'Lonely',
+    'Frozen',
+    'Secret',
+    'Narrow',
+    'Wild',
+    'Pale',
+    'Distant',
+    'Iron',
+    'Gentle',
+    'Shattered',
+    'Velvet',
+    'Hollow',
+    'Burning',
+    'Still',
+    'Endless',
+    'Fading',
+    'Silver',
+    'Crooked',
+    'Deep',
+    'Northern',
 ];
 
 const NOUNS = [
-    "Garden", "River", "Library", "Harbor", "Mirror", "Forest", "Clock", "Window",
-    "Bridge", "Lantern", "Sparrow", "Ocean", "Mountain", "Letter", "Shadow", "Orchard",
-    "Compass", "Ember", "Meadow", "Passport", "Lighthouse", "Notebook", "Valley", "Crown",
-    "Station", "Canvas", "Thunder", "Anchor", "Corridor", "Horizon",
+    'Garden',
+    'River',
+    'Library',
+    'Harbor',
+    'Mirror',
+    'Forest',
+    'Clock',
+    'Window',
+    'Bridge',
+    'Lantern',
+    'Sparrow',
+    'Ocean',
+    'Mountain',
+    'Letter',
+    'Shadow',
+    'Orchard',
+    'Compass',
+    'Ember',
+    'Meadow',
+    'Passport',
+    'Lighthouse',
+    'Notebook',
+    'Valley',
+    'Crown',
+    'Station',
+    'Canvas',
+    'Thunder',
+    'Anchor',
+    'Corridor',
+    'Horizon',
 ];
 
 const isValidEnv = validateEnv(process.env);
 
 if (!isValidEnv.success) {
-    console.error("Invalid environment; refusing to seed.");
+    console.error('Invalid environment; refusing to seed.');
     process.exit(1);
 }
 
@@ -61,7 +199,7 @@ const client = new Client({
 });
 
 function sqlTextArray(values) {
-    return `ARRAY[${values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
+    return `ARRAY[${values.map((value) => `'${value.replaceAll("'", "''")}'`).join(', ')}]::text[]`;
 }
 
 const borrowableAuthors = AUTHORS - UNBORROWED_AUTHORS;
@@ -73,11 +211,11 @@ async function seed() {
 
     try {
         await client.connect();
-        await client.query("BEGIN");
-        await client.query("SET LOCAL synchronous_commit = off");
+        await client.query('BEGIN');
+        await client.query('SET LOCAL synchronous_commit = off');
 
-        console.log("Truncating tables...");
-        await client.query("TRUNCATE loans, book_copies, books, members, authors CASCADE");
+        console.log('Truncating tables...');
+        await client.query('TRUNCATE loans, book_copies, books, members, authors CASCADE');
 
         console.log(`Inserting ${AUTHORS} authors...`);
         await client.query(`
@@ -144,7 +282,7 @@ async function seed() {
             JOIN seed_authors sa ON sa.n = sb.author_n;
         `);
 
-        console.log("Inserting book copies from total_copies...");
+        console.log('Inserting book copies from total_copies...');
         await client.query(`
             INSERT INTO book_copies (book_id)
             SELECT sb.book_id
@@ -197,7 +335,7 @@ async function seed() {
               AND r.rn > r.n_copies;
         `);
 
-        console.log("Assigning copy_id to loans...");
+        console.log('Assigning copy_id to loans...');
         await client.query(`
             WITH numbered_copies AS (
                 SELECT
@@ -233,8 +371,8 @@ async function seed() {
               AND l.copy_id IS NULL;
         `);
 
-        await client.query("COMMIT");
-        await client.query("ANALYZE authors, members, books, book_copies, loans");
+        await client.query('COMMIT');
+        await client.query('ANALYZE authors, members, books, book_copies, loans');
 
         const stats = await client.query(`
             SELECT 'authors' AS relation, COUNT(*)::bigint AS n FROM authors
@@ -270,18 +408,18 @@ async function seed() {
                      WHERE published_at IS NULL;
         `);
 
-        console.log("\nSeed complete:");
+        console.log('\nSeed complete:');
         for (const row of stats.rows) {
             console.log(`  ${row.relation}: ${row.n}`);
         }
         console.log(`\nTook ${((Date.now() - started) / 1000).toFixed(1)}s`);
     } catch (err) {
         try {
-            await client.query("ROLLBACK");
+            await client.query('ROLLBACK');
         } catch {
             // connection may already be dead
         }
-        console.error("Seed failed:", err.stack);
+        console.error('Seed failed:', err.stack);
         process.exitCode = 1;
     } finally {
         await client.end();

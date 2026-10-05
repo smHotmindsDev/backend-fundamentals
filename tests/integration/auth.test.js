@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {ERROR_CODES, MESSAGES} from '../../src/utils/ServerError.js';
+import { ERROR_CODES, MESSAGES } from '../../src/utils/ServerError.js';
 import { startServer, assertEnvelopeId, TEST_API_KEY } from '../helpers/http.js';
 
 const PATH = '/reports/top-books';
@@ -26,7 +26,7 @@ test('missing key → 401 invalid_auth', async (t) => {
 
 test('wrong key → 401 invalid_auth, same message', async (t) => {
     const { get } = await startServer(t);
-    const res = await get(PATH, { 'X-API-Key':  'wrong-key' });
+    const res = await get(PATH, { 'X-API-Key': 'wrong-key' });
     assert.equal(res.status, 401);
     const body = await assertEnvelopeId(res);
     assert.equal(body.statusCode, 401);
@@ -38,7 +38,7 @@ test('valid key, 6th request in the window → 429 rate_limit_error with Retry-A
     const { get } = await startServer(t);
     for (let i = 0; i < 5; i++) {
         const res = await get(PATH, { 'X-API-Key': TEST_API_KEY });
-        assert.equal(res.status, 200)
+        assert.equal(res.status, 200);
     }
     const res = await get(PATH, { 'X-API-Key': TEST_API_KEY });
     assert.equal(res.status, 429);
@@ -51,7 +51,7 @@ test('valid key, 6th request in the window → 429 rate_limit_error with Retry-A
 
 test('junk keys do not consume the limiter', async (t) => {
     const { get } = await startServer(t);
-    const res = await get(PATH, { 'X-API-Key':  'wrong-key' });
+    const res = await get(PATH, { 'X-API-Key': 'wrong-key' });
     assert.equal(res.status, 401);
     for (let i = 0; i < 5; i++) {
         const res = await get(PATH, { 'X-API-Key': TEST_API_KEY });

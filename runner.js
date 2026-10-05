@@ -1,7 +1,7 @@
-import {Client} from "pg";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import validateEnv from "./src/utils/validateEnv.js";
+import { Client } from 'pg';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import validateEnv from './src/utils/validateEnv.js';
 
 const isValidEnv = validateEnv(process.env);
 
@@ -24,9 +24,7 @@ const migration_dir = './migrations';
 function readFolder(dir) {
     try {
         const allFiles = fs.readdirSync(dir);
-        const sqlFiles = allFiles
-            .filter(file => path.extname(file).toLowerCase() === '.sql')
-            .sort();
+        const sqlFiles = allFiles.filter((file) => path.extname(file).toLowerCase() === '.sql').sort();
         console.log(`Loading ${dir}`);
         console.log(sqlFiles);
 
@@ -70,7 +68,7 @@ async function runMigration() {
         const res = await client.query('SELECT filename FROM schema_migration');
         const sqlFiles = readFolder(migration_dir);
         const implementedSqlFiles = new Set(res.rows.map((row) => row.filename));
-        const missingSqlFiles = sqlFiles.filter(file => !implementedSqlFiles.has(file));
+        const missingSqlFiles = sqlFiles.filter((file) => !implementedSqlFiles.has(file));
 
         if (missingSqlFiles.length > 0) {
             console.log('Migration rows:', missingSqlFiles);
@@ -100,7 +98,5 @@ async function runMigration() {
         await client.end(); // Must manually close connection
     }
 }
-
-
 
 runMigration();
