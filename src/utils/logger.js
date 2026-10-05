@@ -1,4 +1,4 @@
-import pino from "pino";
+import pino from 'pino';
 
 // pino-pretty only for a human at a terminal. When stdout is a pipe (node --test,
 // CI, Docker) the pretty worker thread sometimes keeps the process alive after
@@ -14,11 +14,11 @@ const logger = pino(
                 target: 'pino/file',
                 level: 'debug',
                 // mkdir: logs/ is gitignored, so a fresh checkout (CI) has no such folder
-                options: { destination: './logs/error.json', append: true, mkdir: true }
+                options: { destination: './logs/error.json', append: true, mkdir: true },
             },
             stdoutTarget,
         ],
-    })
+    }),
 );
 
 export default logger;

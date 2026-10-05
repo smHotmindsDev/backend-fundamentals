@@ -1,11 +1,11 @@
-import fs from "node:fs";
+import fs from 'node:fs';
 import { createReadStream } from 'node:fs';
-import ServerError from "./ServerError.js";
+import ServerError from './ServerError.js';
 
 const readStreamMiddleware = (filePath) => {
     return (req, res, next) => {
         let chunksReceived = 0;
-        let rawData = "";
+        let rawData = '';
 
         const stream = createReadStream(filePath, { encoding: 'utf8' });
 
@@ -16,13 +16,13 @@ const readStreamMiddleware = (filePath) => {
 
         stream.on('end', () => {
             req.rawData = rawData;
-            next()
+            next();
         });
 
         stream.on('error', (err) => {
-            next(new ServerError(`An error occurred: ${err.message}`, 500))
+            next(new ServerError(`An error occurred: ${err.message}`, 500));
         });
     };
-}
+};
 
 export default readStreamMiddleware;

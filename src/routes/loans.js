@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import ServerError from "../utils/ServerError.js";
-import {loansBodySchema, loansHeaderSchema} from "../schemas/loans.js";
+import ServerError from '../utils/ServerError.js';
+import { loansBodySchema, loansHeaderSchema } from '../schemas/loans.js';
 export const loansRouter = Router();
 
 const valueAt = (input, path) => path.reduce((current, key) => current?.[key], input);
@@ -13,25 +13,26 @@ const detailCode = (issue, input) => {
     return 'invalid_type';
 };
 
-const validationDetails = (issues, input) => issues.map((issue) => ({
-    field: issue.path.join('.') === 'idempotencyKey' ? 'Idempotency-Key' : (issue.path.join('.') || 'body'),
-    code: detailCode(issue, input),
-    message: issue.message,
-}));
+const validationDetails = (issues, input) =>
+    issues.map((issue) => ({
+        field: issue.path.join('.') === 'idempotencyKey' ? 'Idempotency-Key' : issue.path.join('.') || 'body',
+        code: detailCode(issue, input),
+        message: issue.message,
+    }));
 
-async function findByIdempotencyKey(client, idempotencyKey){
+async function findByIdempotencyKey(client, idempotencyKey) {
     // Check for the existence of the Idempotency Key
     const existingKey = await client.query(
         `SELECT loan_id, member, book, borrowed_at, due_at
             FROM loans
             WHERE idempotency_key = $1`,
-        [idempotencyKey]
+        [idempotencyKey],
     );
 
-   return existingKey.rows[0];
+    return existingKey.rows[0];
 }
 
-async function borrow(client, {member, book, idempotencyKey}) {
+async function borrow(client, { member, book, idempotencyKey }) {
     const existing = await findByIdempotencyKey(client, idempotencyKey);
     if (existing) return existing;
 
@@ -40,7 +41,7 @@ async function borrow(client, {member, book, idempotencyKey}) {
         `SELECT member_id
              FROM members
              WHERE members.member_id = $1;`,
-        [member]
+        [member],
     );
 
     if (existingMember.rowCount === 0) {
@@ -52,15 +53,16 @@ async function borrow(client, {member, book, idempotencyKey}) {
         `SELECT book_id
              FROM books
              WHERE books.book_id = $1;`,
-        [book]
+        [book],
     );
 
     if (existingBook.rowCount === 0) {
-        throw ServerError.notFound(`Book with id:${book} undefined`)
+        throw ServerError.notFound(`Book with id:${book} undefined`);
     }
 
     // Check for the available copies of book
-    const availableCopies = await client.query(`
+    const availableCopies = await client.query(
+        `
             SELECT book_copies.copy_id
             FROM book_copies
                 LEFT JOIN loans
@@ -69,14 +71,17 @@ async function borrow(client, {member, book, idempotencyKey}) {
             WHERE book_copies.book_id = $1
               AND loans.loan_id IS NULL
             ORDER BY book_copies.copy_id;
-        `, [book]);
+        `,
+        [book],
+    );
 
     if (availableCopies.rows.length === 0) {
         throw ServerError.conflict('copy already taken, conflict');
     }
 
     // Create the loan
-    const created = await client.query(`
+    const created = await client.query(
+        `
             INSERT INTO loans(loan_id, member, book, copy_id, borrowed_at, due_at, idempotency_key)
             VALUES (
                 gen_random_uuid(),
@@ -88,7 +93,9 @@ async function borrow(client, {member, book, idempotencyKey}) {
                 $4
             )
             RETURNING loan_id, member, book, borrowed_at, due_at;
-        `, [member, book, availableCopies.rows[0]['copy_id'], idempotencyKey]);
+        `,
+        [member, book, availableCopies.rows[0]['copy_id'], idempotencyKey],
+    );
 
     return created.rows[0];
 }
@@ -101,7 +108,7 @@ loansRouter.post('/', async (req, res, next) => {
 
     // The data sent from the client lives inside req.headers['idempotency-key'] and req.body
     const headerInput = {
-        idempotencyKey: req.headers['idempotency-key']
+        idempotencyKey: req.headers['idempotency-key'],
     };
     const bodyInput = req.body;
 
@@ -126,10 +133,10 @@ loansRouter.post('/', async (req, res, next) => {
     try {
         // Start the transaction
         await client.query('BEGIN');
-        const loan = await borrow(client, {member, book, idempotencyKey});
+        const loan = await borrow(client, { member, book, idempotencyKey });
         await client.query('COMMIT');
         return res.status(201).json(loan);
-    } catch(err) {
+    } catch (err) {
         // Rollback if any query failed
         await client.query('ROLLBACK');
 
@@ -137,17 +144,17 @@ loansRouter.post('/', async (req, res, next) => {
             throw ServerError.conflict('copy already taken, conflict');
         } else if (err.code === '23505' && err.constraint === 'uidx_loans_idempotency_key') {
             const existing = await findByIdempotencyKey(client, idempotencyKey);
-            if (existing) return  res.status(201).json(existing);
+            if (existing) return res.status(201).json(existing);
         }
 
         // ServerError passes through the error handler as is; anything else becomes 500.
         throw err;
     } finally {
-            // CRITICAL: Always release the client back to the pool
-            client.release();
-        }
+        // CRITICAL: Always release the client back to the pool
+        client.release();
+    }
 });
 
 loansRouter.post('/:id/return', async (req, res, next) => {
     return res.sendStatus(501);
-})
+});
