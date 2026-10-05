@@ -147,3 +147,7 @@ loansRouter.post('/', async (req, res, next) => {
             client.release();
         }
 });
+
+loansRouter.post('/:id/return', async (req, res, next) => {
+    return res.sendStatus(501);
+})

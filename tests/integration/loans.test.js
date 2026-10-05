@@ -425,6 +425,33 @@ describe('POST /loans — double-borrow race', () => {
         })
     })
     // error/edge: n/a as noted
-})
+});
+
+// 3. «assert no loans row remove»
+//
+// Це формулювання незрозуміле.
+// Схоже, ви мали на увазі, що жодна позика не змінилась.
+// З невалідним id змінити нічого й не можна, тож вирішіть, що саме тут має сенс перевіряти.
+// Наприклад, що returned_at у відкритих позиках з фікстури лишився null.
+// Або приберіть цю частину, якщо вона нічого не додає.
+//
+// 4. Контракт не оновлено
+//
+// У return-loan.md у розділі Errors досі лише 404. План тепер обіцяє 422 з details[].field = "id", а контракт про це мовчить. Варто додати туди рядок про 422, а заодно й про 500, як у create-loan.md.
+//
+// Дрібниця
+//
+// Unit-рядок POST /loans/:id/return uuid v4 parses точніше записати як «:id uuid v4 parses»: схема валідує параметр, а не весь запит.
+
+describe('POST /loans/:id/return — idempotent return', () => {
+    describe('Happy path', () => {
+        test.todo('Open loan …403 (Returnable Book) returns 200 with the loan and returned_at set to CURRENT_DATE')
+        test.todo('Same return repeated on …403 returns 200 with the same body, returned_at unchanged (no-op)')
+        test.todo('Parallel returns of open loan …403 both return 200 with identical returned_at, matching the loans row')
+    });
+    describe('Error / edge', () => {
+        test.todo('Unknown loan_id (…997) returns 404 not_found with message Loan with id:<id> undefined')
+    })
+});
 
 after(() => pool.end());
