@@ -20,7 +20,7 @@ const validationDetails = (issues, input) =>
         message: issue.message,
     }));
 
-async function findByIdempotencyKey(client, idempotencyKey) {
+async function findLoanByIdempotencyKey(client, idempotencyKey) {
     // Check for the existence of the Idempotency Key
     const existingKey = await client.query(
         `SELECT loan_id, member, book, borrowed_at, due_at
@@ -32,8 +32,8 @@ async function findByIdempotencyKey(client, idempotencyKey) {
     return existingKey.rows[0];
 }
 
-async function borrow(client, { member, book, idempotencyKey }) {
-    const existing = await findByIdempotencyKey(client, idempotencyKey);
+async function borrowLoan(client, { member, book, idempotencyKey }) {
+    const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
     if (existing) return existing;
 
     // Check for the existence of the member
@@ -133,7 +133,7 @@ loansRouter.post('/', async (req, res, next) => {
     try {
         // Start the transaction
         await client.query('BEGIN');
-        const loan = await borrow(client, { member, book, idempotencyKey });
+        const loan = await borrowLoan(client, { member, book, idempotencyKey });
         await client.query('COMMIT');
         return res.status(201).json(loan);
     } catch (err) {
@@ -143,7 +143,7 @@ loansRouter.post('/', async (req, res, next) => {
         if (err.code === '23505' && err.constraint === 'uidx_borrowed_book_copy') {
             throw ServerError.conflict('copy already taken, conflict');
         } else if (err.code === '23505' && err.constraint === 'uidx_loans_idempotency_key') {
-            const existing = await findByIdempotencyKey(client, idempotencyKey);
+            const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
             if (existing) return res.status(201).json(existing);
         }
 
