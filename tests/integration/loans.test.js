@@ -1,9 +1,8 @@
 import { test, after, describe } from 'node:test';
-import { createTestPool, loadFixture } from '../helpers/db.js';
+import { createTestPool, loadFixture, resolveDate } from '../helpers/db.js';
 import { startServer, UUID_V4 } from '../helpers/http.js';
 import assert from 'node:assert/strict';
 import { addDays } from '../helpers/clock.js';
-import { resolveDate } from '../helpers/db.js';
 
 const pool = createTestPool();
 
@@ -210,7 +209,7 @@ describe('POST /loans — transactional borrow', () => {
             assert.equal(
                 body.message,
                 `Book with id:${book} undefined`,
-                'Unknown book_id returns appropriate error message: Member with id:<id> undefined',
+                'Unknown book_id returns appropriate error message: Book with id:<id> undefined',
             );
             assert.equal(loansAfter, loansBefore, 'No rows inserted');
         });
@@ -574,8 +573,62 @@ describe('POST /loans/:id/return — idempotent return', () => {
         });
     });
     describe('Error / edge', () => {
-        test.todo('Unknown loan_id (…997) returns 404 not_found with message Loan with id:<id> undefined');
-        test.todo('Invalid loan_id returns 422 validation_error with details[].field = "id"');
+        test('Unknown loan_id (…997) returns 404 not_found with message Loan with id:<id> undefined', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const loanId = fixture.unseeded_ids_for_404_tests.unknown_loan_id;
+            const loansIds = fixture.loans.map((l) => l.loan_id);
+
+            // Act
+            const res = await callToReturn(post, { loanId });
+
+            //Asserts
+            assert.equal(res.status, 404, 'Unknown loan_id returns 404 not_found');
+
+            const body = await res.json();
+
+            assert.equal(body.statusCode, 404, 'Unknown loan_id returns 404');
+            assert.equal(body.error, 'not_found', 'Unknown loan_id returns not_found');
+            assert.equal(
+                body.message,
+                `Loan with id:${loanId} undefined`,
+                'Unknown loan_id returns appropriate error message: Loan with id:<id> undefined',
+            );
+
+            for (const id of loansIds) {
+                const { rows } = await pool.query('SELECT * FROM loans WHERE loan_id = $1', [id]);
+                assert.equal(rows.length, 1);
+                assert.equal(rows[0].returned_at, null, 'Open loans are unreturned');
+            }
+        });
+        test('Invalid loan_id returns 422 validation_error with details[].field = "id"', async (t) => {
+            // Arrange
+            const { post } = await startServer(t, { dbClient: pool });
+            const cases = [
+                ['id not a uuid', 'not-a-uuid'],
+                // Valid RFC 4122 layout but version 1: the client must send v4.
+                ['id uuid v1', '00000000-0000-1000-8000-000000000009'],
+            ];
+
+            for (const [label, loanId] of cases) {
+                await t.test(label, async () => {
+                    // Act: exactly one call
+                    const res = await callToReturn(post, { loanId });
+
+                    // Assert
+                    assert.equal(res.status, 422);
+                    const body = await res.json();
+                    assert.equal(body.error, 'validation_error');
+                    assert.ok(Array.isArray(body.details), 'details must be an array');
+                    assert.ok(
+                        body.details.some((d) => d.field === 'id'),
+                        `details must name id, got ${JSON.stringify(body.details)}`,
+                    );
+                    assert.equal('loan_id' in body, false, 'an error response carries no loan');
+                });
+            }
+        });
     });
 });
 
