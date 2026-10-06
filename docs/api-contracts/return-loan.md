@@ -51,6 +51,8 @@ Authorization is described in a separate document.
 
 ## Errors
 - `404` — `Loan with id:$1 undefined`
+- `422` — `:id is wrong uuid type (with details[].field = "id")`
+- `500` — Internal Server Error — server-side errors
 
 ## Side effects
 If the loan is still open, record the current date in `loans.returned_at`.
@@ -126,4 +128,3 @@ First and second return of `…403` — same body. `returned_at` is the date of 
   "returned_at": "<CURRENT_DATE>"
 }
 ```
-
