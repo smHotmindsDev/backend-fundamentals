@@ -35,8 +35,8 @@ async function findLoanByIdempotencyKey(client, idempotencyKey) {
 async function findLoanById(client, loanId) {
     const existingLoan = await client.query(
         `SELECT loan_id, member, book, borrowed_at, due_at, returned_at
-      FROM loans
-      WHERE loans.loan_id = $1`,
+            FROM loans
+            WHERE loans.loan_id = $1`,
         [loanId],
     );
 
