@@ -542,7 +542,7 @@ describe('POST /loans/:id/return — idempotent return', () => {
 
             assert.equal(returnedAtSecondRes, yesterday, 'returned_at unchanged (no-op)');
         });
-        test('Parallel returns of open loan …403 both return 200 with identica returned_at, matching the loans row', async (t) => {
+        test('Parallel returns of open loan …403 both return 200 with identical returned_at, matching the loans row', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const EXPECTED_STATUS = 200;
             const fixture = await loadFixture(pool, 'loans');
@@ -559,7 +559,7 @@ describe('POST /loans/:id/return — idempotent return', () => {
 
             const [bodyA, bodyB] = await Promise.all([resA.json(), resB.json()]);
 
-            assert.deepEqual(bodyB.returned_at, bodyA.returned_at, 'Parallel returns return identica returned_at');
+            assert.deepEqual(bodyB.returned_at, bodyA.returned_at, 'Parallel returns return identical returned_at');
 
             const returnedLoan = (
                 await pool.query(
