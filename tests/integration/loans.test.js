@@ -3,6 +3,7 @@ import { createTestPool, loadFixture } from '../helpers/db.js';
 import { startServer, UUID_V4 } from '../helpers/http.js';
 import assert from 'node:assert/strict';
 import { addDays } from '../helpers/clock.js';
+import { resolveDate } from '../helpers/db.js';
 
 const pool = createTestPool();
 
@@ -10,6 +11,10 @@ async function callToCreate(post, bodyData, idempotencyKey) {
     return await post('/loans', bodyData, {
         'Idempotency-Key': idempotencyKey,
     });
+}
+
+async function callToReturn(post, { loanId }) {
+    return await post(`/loans/${loanId}/return`);
 }
 
 const countLoans = async () => (await pool.query('SELECT count(*)::int AS n FROM loans')).rows[0].n;
@@ -457,32 +462,120 @@ describe('POST /loans — double-borrow race', () => {
     // error/edge: n/a as noted
 });
 
-// 3. «assert no loans row remove»
-//
-// Це формулювання незрозуміле.
-// Схоже, ви мали на увазі, що жодна позика не змінилась.
-// З невалідним id змінити нічого й не можна, тож вирішіть, що саме тут має сенс перевіряти.
-// Наприклад, що returned_at у відкритих позиках з фікстури лишився null.
-// Або приберіть цю частину, якщо вона нічого не додає.
-//
-// 4. Контракт не оновлено
-//
-// У return-loan.md у розділі Errors досі лише 404. План тепер обіцяє 422 з details[].field = "id", а контракт про це мовчить. Варто додати туди рядок про 422, а заодно й про 500, як у create-loan.md.
-//
-// Дрібниця
-//
-// Unit-рядок POST /loans/:id/return uuid v4 parses точніше записати як «:id uuid v4 parses»: схема валідує параметр, а не весь запит.
-
 describe('POST /loans/:id/return — idempotent return', () => {
     describe('Happy path', () => {
-        test.todo('Open loan …403 (Returnable Book) returns 200 with the loan and returned_at set to CURRENT_DATE');
-        test.todo('Same return repeated on …403 returns 200 with the same body, returned_at unchanged (no-op)');
-        test.todo(
-            'Parallel returns of open loan …403 both return 200 with identical returned_at, matching the loans row',
-        );
+        test('Open loan …403 (Returnable Book) returns 200 with the loan and returned_at set to CURRENT_DATE', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const book = fixture.books.find((b) => b.title === 'Returnable Book').book_id;
+            const { loan_id: loanId, member, borrowed_at, due_at } = fixture.loans.find((l) => l.book === book);
+            const loansIds = fixture.loans.map((l) => l.loan_id).filter((id) => id !== loanId);
+            const borrowedAt = resolveDate(borrowed_at);
+            const dueAt = resolveDate(due_at);
+            const {
+                rows: [{ today }],
+            } = await pool.query('SELECT CURRENT_DATE AS today');
+            const loan = {
+                loan_id: loanId,
+                member,
+                book,
+                borrowed_at: borrowedAt,
+                due_at: dueAt,
+                returned_at: today,
+            };
+
+            // Act
+            const res = await callToReturn(post, { loanId });
+
+            //Asserts 1: the HTTP Contracts
+            assert.equal(res.status, 200, 'Returns 200');
+
+            const body = await res.json();
+
+            assert.deepEqual(body, loan, 'Returns Loan');
+
+            // Asserts 2: the database
+            const { rows } = await pool.query('SELECT * FROM loans WHERE loan_id = $1', [loanId]);
+            assert.equal(rows.length, 1);
+            assert.equal(rows[0].returned_at, today, 'Returns returned_at set to CURRENT_DATE (db)');
+            for (const id of loansIds) {
+                const { rows } = await pool.query('SELECT * FROM loans WHERE loan_id = $1', [id]);
+                assert.equal(rows.length, 1);
+                assert.equal(rows[0].returned_at, null, 'Other open loans are unreturned');
+            }
+        });
+        test('Same return repeated on …403 returns 200 with the same body, returned_at unchanged (no-op)', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const EXPECTED_STATUS = 200;
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const book = fixture.books.find((b) => b.title === 'Returnable Book').book_id;
+            const { loan_id: loanId } = fixture.loans.find((l) => l.book === book);
+            const {
+                rows: [{ today }],
+            } = await pool.query('SELECT CURRENT_DATE AS today');
+            const yesterday = addDays(today, -1);
+
+            // Act
+            const firstRes = await callToReturn(post, { loanId });
+            const updatedRes = await pool.query(
+                `UPDATE loans
+            SET returned_at = $1
+            WHERE loan_id = $2
+            RETURNING loan_id, member, book, borrowed_at, due_at, returned_at;`,
+                [yesterday, loanId],
+            );
+
+            const secondRes = await callToReturn(post, { loanId });
+
+            //Asserts 1: the HTTP Contracts
+            assert.equal(firstRes.status, EXPECTED_STATUS, 'First return returns 200');
+            assert.equal(secondRes.status, EXPECTED_STATUS, 'Second return returns 200');
+
+            const secondBody = await secondRes.json();
+
+            assert.deepEqual(secondBody, updatedRes.rows[0], 'Same return returns the same body');
+
+            const { returned_at: returnedAtSecondRes } = (
+                await pool.query(`SELECT returned_at FROM loans WHERE loan_id = $1`, [loanId])
+            ).rows[0];
+
+            assert.equal(returnedAtSecondRes, yesterday, 'returned_at unchanged (no-op)');
+        });
+        test('Parallel returns of open loan …403 both return 200 with identica returned_at, matching the loans row', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const EXPECTED_STATUS = 200;
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const book = fixture.books.find((b) => b.title === 'Returnable Book').book_id;
+            const { loan_id: loanId } = fixture.loans.find((l) => l.book === book);
+
+            // Act: two parallel calls .
+            const [resA, resB] = await Promise.all([callToReturn(post, { loanId }), callToReturn(post, { loanId })]);
+
+            //Asserts 1: the HTTP Contracts
+            assert.equal(resA.status, EXPECTED_STATUS, 'Return A returns 200');
+            assert.equal(resB.status, EXPECTED_STATUS, 'Return B returns 200');
+
+            const [bodyA, bodyB] = await Promise.all([resA.json(), resB.json()]);
+
+            assert.deepEqual(bodyB.returned_at, bodyA.returned_at, 'Parallel returns return identica returned_at');
+
+            const returnedLoan = (
+                await pool.query(
+                    `SELECT loan_id, member, book, borrowed_at, due_at, returned_at FROM loans WHERE loan_id = $1`,
+                    [loanId],
+                )
+            ).rows[0];
+
+            assert.deepEqual(bodyA, returnedLoan, 'Body A matches the loans row');
+            assert.deepEqual(bodyB, returnedLoan, 'Body B matches the loans row');
+        });
     });
     describe('Error / edge', () => {
         test.todo('Unknown loan_id (…997) returns 404 not_found with message Loan with id:<id> undefined');
+        test.todo('Invalid loan_id returns 422 validation_error with details[].field = "id"');
     });
 });
 

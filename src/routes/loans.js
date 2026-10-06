@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import ServerError from '../utils/ServerError.js';
-import { loansBodySchema, loansHeaderSchema } from '../schemas/loans.js';
+import { loansBodySchema, loansHeaderSchema, loansParamsSchema } from '../schemas/loans.js';
 export const loansRouter = Router();
 
 const valueAt = (input, path) => path.reduce((current, key) => current?.[key], input);
@@ -30,6 +30,17 @@ async function findLoanByIdempotencyKey(client, idempotencyKey) {
     );
 
     return existingKey.rows[0];
+}
+
+async function findLoanById(client, loanId) {
+    const existingLoan = await client.query(
+        `SELECT loan_id, member, book, borrowed_at, due_at, returned_at
+      FROM loans
+      WHERE loans.loan_id = $1`,
+        [loanId],
+    );
+
+    return existingLoan.rows[0];
 }
 
 async function borrowLoan(client, { member, book, idempotencyKey }) {
@@ -100,6 +111,25 @@ async function borrowLoan(client, { member, book, idempotencyKey }) {
     return created.rows[0];
 }
 
+async function returnLoan(client, { loanId }) {
+    const loan = await findLoanById(client, loanId);
+    if (!loan) throw ServerError.notFound(`Loan with id:${loanId} undefined`);
+
+    if (loan.returned_at !== null) return loan;
+
+    const updated = await client.query(
+        `UPDATE loans
+            SET returned_at = CURRENT_DATE
+            WHERE loan_id = $1 AND returned_at IS NULL
+            RETURNING loan_id, member, book, borrowed_at, due_at, returned_at;`,
+        [loanId],
+    );
+
+    if (updated.rows[0]) return updated.rows[0];
+
+    return findLoanById(client, loanId);
+}
+
 loansRouter.post('/', async (req, res, next) => {
     const headerContentType = req.headers['content-type'];
     if (headerContentType !== 'application/json') {
@@ -156,5 +186,34 @@ loansRouter.post('/', async (req, res, next) => {
 });
 
 loansRouter.post('/:id/return', async (req, res, next) => {
-    return res.sendStatus(501);
+    const paramsInput = req.params;
+    const paramsValid = loansParamsSchema.safeParse(paramsInput);
+
+    if (!paramsValid.success) {
+        const details = validationDetails(paramsValid.error.issues, paramsInput);
+        throw ServerError.validation('Validation failed', details);
+    }
+
+    const { id: loanId } = paramsValid.data;
+
+    const client = await req.db.connect();
+
+    try {
+        // Start the transaction
+        await client.query('BEGIN');
+
+        const loan = await returnLoan(client, { loanId });
+
+        await client.query('COMMIT');
+        return res.status(200).json(loan);
+    } catch (err) {
+        // Rollback if any query failed
+        await client.query('ROLLBACK');
+
+        // ServerError passes through the error handler as is; anything else becomes 500.
+        throw err;
+    } finally {
+        // CRITICAL: Always release the client back to the pool
+        client.release();
+    }
 });
