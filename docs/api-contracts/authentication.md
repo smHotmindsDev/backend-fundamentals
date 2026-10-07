@@ -14,7 +14,7 @@ X-API-Key: abcdef12345
 
 X-API-Key was chosen because the Bearer semantics (an OAuth2 access token with expiry/refresh) do not fit the use case—here, we are dealing with a static, long-lived key rather than an issued session.
 
-## Success
+## Success 
 If successful, the query execution continues and the success endpoint is applied.
 
 ## Errors

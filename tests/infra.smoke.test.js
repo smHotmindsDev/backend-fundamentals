@@ -5,11 +5,20 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTestPool, loadFixture, materializeFixture, readFixture, resolveDate, truncateAll } from './helpers/db.js';
+import {
+    createTestPool,
+    loadFixture,
+    materializeFixture,
+    readFixture,
+    resolveDate,
+    truncateAll,
+} from './helpers/db.js';
 import { TEST_TODAY, addDays } from './helpers/clock.js';
 
 let pool;
-before(() => { pool = createTestPool(); });
+before(() => {
+    pool = createTestPool();
+});
 after(() => pool.end());
 
 test('resolveDate understands every form used in the fixtures', () => {
@@ -26,14 +35,19 @@ test('materializeFixture expands inserted_loans into returned loans', async () =
     const rows = materializeFixture(await readFixture('top-books'));
     assert.equal(rows.books.length, 13);
     assert.equal(rows.loans.length, 515); // sum of inserted_loans
-    assert.ok(rows.loans.every((l) => l.returned_at !== null), 'all generated loans are returned');
+    assert.ok(
+        rows.loans.every((l) => l.returned_at !== null),
+        'all generated loans are returned',
+    );
     assert.equal(new Set(rows.loans.map((l) => l.loan_id)).size, 515, 'loan ids unique');
     assert.equal(new Set(rows.loans.map((l) => l.idempotency_key)).size, 515, 'idempotency keys unique');
     assert.ok(!('inserted_loans' in rows.books[0]), 'generator spec is not a column');
 });
 
 test('test database is reachable and fully migrated', async () => {
-    const { rows } = await pool.query('SELECT current_database() AS db, COUNT(*)::int AS n FROM schema_migration GROUP BY 1');
+    const { rows } = await pool.query(
+        'SELECT current_database() AS db, COUNT(*)::int AS n FROM schema_migration GROUP BY 1',
+    );
     assert.match(rows[0].db, /_test$/);
     assert.equal(rows[0].n, 24);
 });
@@ -51,7 +65,9 @@ for (const name of ['pagination', 'top-books', 'loans']) {
 
 test('date columns come back as YYYY-MM-DD strings and match the frozen clock', async () => {
     await loadFixture(pool, 'loans');
-    const { rows } = await pool.query(`SELECT borrowed_at, due_at FROM loans WHERE loan_id = $1`, ['00000000-0000-0000-0000-000000000403']);
+    const { rows } = await pool.query(`SELECT borrowed_at, due_at FROM loans WHERE loan_id = $1`, [
+        '00000000-0000-4000-8000-000000000403',
+    ]);
     assert.deepEqual(rows[0], { borrowed_at: addDays(TEST_TODAY, -3), due_at: addDays(TEST_TODAY, 11) });
 });
 

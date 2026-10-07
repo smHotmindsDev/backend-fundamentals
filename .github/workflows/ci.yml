@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       flake_hunt:
-        description: "Run the suite 10 times in a row (flake hunt)"
+        description: 'Run the suite 10 times in a row (flake hunt)'
         type: boolean
         default: false
 
@@ -16,7 +16,7 @@ env:
   POSTGRES_PASSWORD: postgres
   POSTGRES_DB: library_test
   POSTGRES_HOST: localhost
-  POSTGRES_PORT: "5432"
+  POSTGRES_PORT: '5432'
   # required by utils/validateEnv.js
   API_KEY: ci-test-key
 
@@ -30,7 +30,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: library_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
