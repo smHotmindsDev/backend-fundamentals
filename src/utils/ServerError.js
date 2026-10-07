@@ -41,7 +41,7 @@ class ServerError extends Error {
         if (error === undefined) {
             throw new TypeError(
                 `ServerError: statusCode ${statusCode} is not in the API error envelope ` +
-                `(allowed: ${Object.keys(ERROR_CODES).join(', ')})`,
+                    `(allowed: ${Object.keys(ERROR_CODES).join(', ')})`,
             );
         }
 

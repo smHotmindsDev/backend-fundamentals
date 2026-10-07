@@ -17,6 +17,7 @@ It is idempotent request.
 - `book` - uuid
 
 Use `Buffer.byteLength(bodyData, 'utf8')` to automatically determine the value based on the size of the request body.
+`Content-Length`: standard HTTP framing. Clients using fetch get it automatically; a raw node:http client sets it with Buffer.byteLength(body, 'utf8').
 The client generates a new UUID v4 for each logical `POST /loans` and sends it in `Idempotency-Key`. The same value is resent only when retrying that request (timeout, lost response). A second loan needs a new key.
 `X-API-Key: abcdef12345` is a placeholder.
 Authorization is described in a separate document.
@@ -58,7 +59,7 @@ Authorization is described in a separate document.
 - `404` — `Member with id:$1 undefined`
 - `404` — `Book with id:$1 undefined`
 - `409` — `copy already taken, conflict`
-- `422` — Validation failed — invalid request body (syntax, data types, required fields)
+- `422` — Validation failed — invalid request body (syntax, data types, required fields) or idempotency key in header (details[].field = "Idempotency-Key")
 - `500` — Internal Server Error — server-side errors
 
 ## Side effects
@@ -176,8 +177,8 @@ Anna borrows Available Book:
 ```json
 {
   "loan_id": "<generated>",
-  "member": "00000000-0000-0000-0000-000000000101",
-  "book": "00000000-0000-0000-0000-000000000201",
+  "member": "00000000-0000-4000-8000-000000000101",
+  "book": "00000000-0000-4000-8000-000000000201",
   "borrowed_at": "<CURRENT_DATE>",
   "due_at": "<CURRENT_DATE + 14 days>"
 }

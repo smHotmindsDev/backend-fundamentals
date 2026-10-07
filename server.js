@@ -1,7 +1,7 @@
-import {Pool} from "pg";
+import { Pool } from 'pg';
 import { createConfig } from './config.js';
 import { createApp } from './src/app.js';
-import validateEnv from "./src/utils/validateEnv.js";
+import validateEnv from './src/utils/validateEnv.js';
 
 const result = validateEnv(process.env);
 if (!result.success) process.exit(1);

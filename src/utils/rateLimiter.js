@@ -1,8 +1,5 @@
-export function createRateLimiter({
-                                      limit,
-                                      windowMs
-}) {
-    if (typeof limit !== 'number' || typeof windowMs !== 'number' ) {
+export function createRateLimiter({ limit, windowMs }) {
+    if (typeof limit !== 'number' || typeof windowMs !== 'number') {
         // TODO Refactor with ServerError()
         return 'incorrect type of arguments';
     }
@@ -33,6 +30,6 @@ export function createRateLimiter({
     }, windowMs).unref();
 
     return {
-        consume
+        consume,
     };
 }

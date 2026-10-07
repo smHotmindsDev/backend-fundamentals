@@ -1,6 +1,6 @@
 import ServerError from './ServerError.js';
 
-export function createAuthMiddleware({apiKey, limiter, now = Date.now}) {
+export function createAuthMiddleware({ apiKey, limiter, now = Date.now }) {
     return (req, res, next) => {
         const provided = req.headers['x-api-key'];
         const currentTime = now();

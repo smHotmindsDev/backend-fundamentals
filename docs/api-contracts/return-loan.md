@@ -51,6 +51,8 @@ Authorization is described in a separate document.
 
 ## Errors
 - `404` — `Loan with id:$1 undefined`
+- `422` — Validation failed — `:id` is not a UUID v4 (details[].field = "id")
+- `500` — Internal Server Error — server-side errors
 
 ## Side effects
 If the loan is still open, record the current date in `loans.returned_at`.
@@ -118,12 +120,11 @@ First and second return of `…403` — same body. `returned_at` is the date of 
 
 ```json
 {
-  "loan_id": "00000000-0000-0000-0000-000000000403",
-  "member": "00000000-0000-0000-0000-000000000102",
-  "book": "00000000-0000-0000-0000-000000000205",
+  "loan_id": "00000000-0000-4000-8000-000000000403",
+  "member": "00000000-0000-4000-8000-000000000102",
+  "book": "00000000-0000-4000-8000-000000000205",
   "borrowed_at": "<CURRENT_DATE - 3>",
   "due_at": "<CURRENT_DATE + 11>",
   "returned_at": "<CURRENT_DATE>"
 }
 ```
-
