@@ -53,7 +53,7 @@ Here: every endpoint against a real test Postgres (Docker), repositories/queries
 
 Auth-lite is HTTP contract (status + header), not limiter arithmetic (that is unit) and not a full user journey (that is E2E). These rows do not require seeded books.
 
-Error bodies (all endpoints): assert `statusCode`, `error`, and `message`; `requestId` is a UUID v4 and equals `X-Request-Id`. Do not deep-equal the whole body.
+Error bodies (all endpoints): assert `statusCode`, `error`, and `message`. Do not deep-equal the whole body. `requestId` (a UUID v4 equal to `X-Request-Id`) is produced by the request-id middleware and the central error handler, not by any route, so it is asserted once as a mechanism — in the auth-lite tests via `assertEnvelopeId` and in the unit test for the request id — rather than repeated in every endpoint's error case.
 
 ### Auth-lite: `X-API-Key` header
 
@@ -99,12 +99,13 @@ Computed from the fixture in `api-contracts/top-books-fixture.json` **after** `b
 - **Why this level:** Real `LIMIT`/`OFFSET` against Postgres
 - **Happy path:** 
   - `GET /books`, `GET /books?page=1`, `GET /books?search=` => `200` + JSON below (page 1 with 10 items)
-  - `GET /books?page=2` => `200` + JSON below (page 2 with 4 items)
+  - `GET /books?page=2` => `200` + JSON below (page 2 with 5 items)
   - `GET /books?page=3` => `200` + `[]`
-  - `GET /books?per_page=14`, `GET /books?per_page=100` => `200` + JSON below (page 1 with 14 items)
+  - `GET /books?per_page=15`, `GET /books?per_page=100` => `200` + JSON below (page 1 with 15 items)
   - `GET /books?search=Around` => `200` + JSON below (page 1 with 3 items)
   - `GET /books?search=around the moon` => `200` + JSON below (page 1 with 2 items)
-  - `GET /books?search=%25`, `GET /books?search=_` => `200` + `[]`
+  - `GET /books?search=%25`, `GET /books?search=50%25` => `200` + JSON below (page 1 with 1 item: the only title with a literal `%`)
+  - `GET /books?search=_` => `200` + `[]` (no title contains `_`; a wildcard would match everything)
 - **Error / edge:** n/a (invalid `page` / `per_page` is the next item)
 
 #### Expected body for `GET /books?search=&page=&per_page` (`200`)
@@ -115,6 +116,7 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
 
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000014", "title": "50% of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000013", "title": "Around the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000012", "title": "The Mysterious Island", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000011", "title": "The Green Ray", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -123,15 +125,15 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
   { "book_id": "00000000-0000-0000-0000-000000000008", "title": "The Steam House", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000007", "title": "Robur the Conqueror", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000006", "title": "In Search of the Castaways", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
-  { "book_id": "00000000-0000-0000-0000-000000000005", "title": "Five Weeks in a Balloon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
-  { "book_id": "00000000-0000-0000-0000-000000000004", "title": "Michael Strogoff", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" }
+  { "book_id": "00000000-0000-0000-0000-000000000005", "title": "Five Weeks in a Balloon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" }
 ]
 ```
 
-`GET /books?page=2` — 4 items (last page, `length < per_page`):
+`GET /books?page=2` — 5 items (last page, `length < per_page`):
 
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000004", "title": "Michael Strogoff", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000003", "title": "From the Earth to the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000002", "title": "Journey to the Centre of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000001", "title": "Around the World in 80 Days", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -141,9 +143,10 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
 
 `GET /books?page=3` → `[]`.
 
-`GET /books?per_page=14`, `GET /books?per_page=100` — 14 items:
+`GET /books?per_page=15`, `GET /books?per_page=100` — 15 items:
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000014", "title": "50% of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000013", "title": "Around the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000012", "title": "The Mysterious Island", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000011", "title": "The Green Ray", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -177,13 +180,19 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
 ]
 ```
 
+`GET /books?search=%25`, `GET /books?search=50%25` 1 item (literal `%`, not a wildcard):
+```json
+[
+  { "book_id": "00000000-0000-0000-0000-000000000014", "title": "50% of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" }
+]
+```
+
 ### `GET /books` — invalid pagination parameters
 
 - **Why this level:** HTTP status mapping; no SQL
 - **Happy path:** n/a
 - **Error / edge:**
-  - `GET /books?page=0`, `page=-1`, `page=abc`, `page=1.5` => `400` `bad_request` (invalid query parameter; no `details`)
-  - `GET /books?per_page=0`, `per_page=-1`, `per_page=abc`, `per_page=1.5` => `400` `bad_request` (invalid query parameter; no `details`)
+  - `page` or `per_page` set to `0`, `-1`, `abc`, or `1.5` (one parameter at a time, the other absent) => `400` `bad_request` (invalid query parameter; no `details`). Same envelope for both parameters, so one parametrised test covers all eight URLs
 
 ### `POST /loans` — transactional borrow
 

@@ -26,4 +26,4 @@ Ideas generated after the test plan was written (README: 🤖 AI-OK "generating 
 
 ### D. Uncovered lines
 
-- [ ] **`src/routes/loans.js` 139–141** — the `23505` branch on `uidx_loans_idempotency_key` never runs (the second request finds the row via `findByIdempotencyKey` first). README requires every uncovered line to be justified: either argue "not deterministically reachable because …", or find a way to force the race (🧠 Manual-only: concurrency).
+- [ ] **`src/routes/loans.js` 176–178** — the `23505` branch on `uidx_loans_idempotency_key` never runs (the second request finds the row via `findByIdempotencyKey` first). README requires every uncovered line to be justified: either argue "not deterministically reachable because …", or find a way to force the race (🧠 Manual-only: concurrency).
