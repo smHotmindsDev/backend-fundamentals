@@ -46,6 +46,7 @@ None.
 
 - Response size is a **fixed** cap of 10 rows. There is no page parameter.
 - Response-time budget: **200 ms** on the full ~500k-loan dataset. That check is **not** part of the small-seed CI suite (plan analysis / local measurement on production-sized data). Functional tests use a tiny deterministic seed.
+- Measured 2026-10-09 on the dev dataset (500,015 loans, 54,646 inside the 90-day window, 50,000 books) with `EXPLAIN (ANALYZE, BUFFERS)`, third warm run: **80 ms** with no extra index (Seq Scan on `loans`, Hash Right Join, HashAggregate over all books). Budget met; no index added. For reference, `loans(borrowed_at, book)` brings it to 38 ms via a Bitmap Index Scan, while `loans(book, borrowed_at)` is ignored by the planner because the only predicate is a range on `borrowed_at`.
 
 ### Query
 
