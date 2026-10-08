@@ -31,6 +31,8 @@ dumps/
 *.sql.gz
 *.pgsql
 *.csv.gz
+lorem-100mb.json
+lorem-500mb.json
 
 # OS
 .DS_Store
@@ -39,6 +41,7 @@ Thumbs.db
 # Editors / IDEs
 .idea/
 .vscode/
+.zed/
 *.swp
 *.swo
 
@@ -47,3 +50,9 @@ Thumbs.db
 .cache/
 tmp/
 temp/
+lorem-100mb.json
+lorem-500mb.json
+/logs
+
+.obsidian
+.cursor
