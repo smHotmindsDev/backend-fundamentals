@@ -38,7 +38,7 @@ async function searchQuery(client, { limit, offset, search }) {
 booksRouter.get('/', async (req, res, next) => {
     const queryInput = req.query;
     const validQuery = booksQuerySchema.safeParse(queryInput);
-    if (!validQuery.success) throw ServerError.badRequest();
+    if (!validQuery.success) throw ServerError.badRequest('invalid query parameter');
 
     const client = await req.db.connect();
 
