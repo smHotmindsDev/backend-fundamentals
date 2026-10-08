@@ -278,6 +278,8 @@ describe('POST /loans — transactional borrow', () => {
                 ['not a uuid', 'not-a-uuid'],
                 // Valid RFC 4122 layout but version 1: the client must send v4
                 ['uuid v1 instead of v4', '00000000-0000-1000-8000-000000000009'],
+                // Present but not a string: zod reports invalid_type, which maps to `invalid_type`
+                ['number instead of string', 42],
             ];
 
             for (const [label, member] of cases) {
