@@ -38,7 +38,7 @@ export function createApp({ env, dbClient, now = Date.now }) {
     });
 
     // Attach application routes
-    app.get('/', (req, res, next) => {
+    app.get('/', (req, res) => {
         return res.status(200).json({ status: 'ok' });
     });
     app.use('/reports/top-books', topBooksRouter);
