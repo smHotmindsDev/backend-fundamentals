@@ -1,0 +1,16 @@
+# Files ignored by .gitignore are skipped automatically.
+
+# Legacy experiments kept for reference
+*.old.js
+*.old.cjs
+
+# Docs and fixtures are formatted by hand
+docs/
+*.md
+
+# Local tool settings
+.claude/
+
+# Written by npm
+package.json
+package-lock.json

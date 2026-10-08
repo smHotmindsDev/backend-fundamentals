@@ -1,0 +1,2 @@
+ALTER TABLE loans
+    ADD COLUMN IF NOT EXISTS copy_id uuid
