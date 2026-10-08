@@ -1,0 +1,219 @@
+import { Router } from 'express';
+import ServerError from '../utils/ServerError.js';
+import { loansBodySchema, loansHeaderSchema, loansParamsSchema } from '../schemas/loans.js';
+export const loansRouter = Router();
+
+const valueAt = (input, path) => path.reduce((current, key) => current?.[key], input);
+
+const detailCode = (issue, input) => {
+    if (issue.code === 'invalid_format') return 'invalid_format';
+    if (issue.code === 'too_small' || issue.code === 'too_big') return 'out_of_range';
+    if (issue.code === 'unrecognized_keys') return 'unknown_field';
+    if (issue.code === 'invalid_type' && valueAt(input, issue.path) === undefined) return 'required';
+    return 'invalid_type';
+};
+
+const validationDetails = (issues, input) =>
+    issues.map((issue) => ({
+        field: issue.path.join('.') === 'idempotencyKey' ? 'Idempotency-Key' : issue.path.join('.') || 'body',
+        code: detailCode(issue, input),
+        message: issue.message,
+    }));
+
+async function findLoanByIdempotencyKey(client, idempotencyKey) {
+    // Check for the existence of the Idempotency Key
+    const existingKey = await client.query(
+        `SELECT loan_id, member, book, borrowed_at, due_at
+            FROM loans
+            WHERE idempotency_key = $1`,
+        [idempotencyKey],
+    );
+
+    return existingKey.rows[0];
+}
+
+async function findLoanById(client, loanId) {
+    const existingLoan = await client.query(
+        `SELECT loan_id, member, book, borrowed_at, due_at, returned_at
+            FROM loans
+            WHERE loans.loan_id = $1`,
+        [loanId],
+    );
+
+    return existingLoan.rows[0];
+}
+
+async function borrowLoan(client, { member, book, idempotencyKey }) {
+    const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
+    if (existing) return existing;
+
+    // Check for the existence of the member
+    const existingMember = await client.query(
+        `SELECT member_id
+             FROM members
+             WHERE members.member_id = $1;`,
+        [member],
+    );
+
+    if (existingMember.rowCount === 0) {
+        throw ServerError.notFound(`Member with id:${member} undefined`);
+    }
+
+    // Check for the existence of the book
+    const existingBook = await client.query(
+        `SELECT book_id
+             FROM books
+             WHERE books.book_id = $1;`,
+        [book],
+    );
+
+    if (existingBook.rowCount === 0) {
+        throw ServerError.notFound(`Book with id:${book} undefined`);
+    }
+
+    // Check for the available copies of book
+    const availableCopies = await client.query(
+        `
+            SELECT book_copies.copy_id
+            FROM book_copies
+                LEFT JOIN loans
+                    ON loans.copy_id = book_copies.copy_id
+                    AND loans.returned_at IS NULL
+            WHERE book_copies.book_id = $1
+              AND loans.loan_id IS NULL
+            ORDER BY book_copies.copy_id;
+        `,
+        [book],
+    );
+
+    if (availableCopies.rows.length === 0) {
+        throw ServerError.conflict('copy already taken, conflict');
+    }
+
+    // Create the loan
+    const created = await client.query(
+        `
+            INSERT INTO loans(loan_id, member, book, copy_id, borrowed_at, due_at, idempotency_key)
+            VALUES (
+                gen_random_uuid(),
+                $1,
+                $2,
+                $3,
+                CURRENT_DATE,
+                CURRENT_DATE + INTERVAL '2 week',
+                $4
+            )
+            RETURNING loan_id, member, book, borrowed_at, due_at;
+        `,
+        [member, book, availableCopies.rows[0]['copy_id'], idempotencyKey],
+    );
+
+    return created.rows[0];
+}
+
+async function returnLoan(client, { loanId }) {
+    const loan = await findLoanById(client, loanId);
+    if (!loan) throw ServerError.notFound(`Loan with id:${loanId} undefined`);
+
+    if (loan.returned_at !== null) return loan;
+
+    const updated = await client.query(
+        `UPDATE loans
+            SET returned_at = CURRENT_DATE
+            WHERE loan_id = $1 AND returned_at IS NULL
+            RETURNING loan_id, member, book, borrowed_at, due_at, returned_at;`,
+        [loanId],
+    );
+
+    if (updated.rows[0]) return updated.rows[0];
+
+    return findLoanById(client, loanId);
+}
+
+loansRouter.post('/', async (req, res) => {
+    const headerContentType = req.headers['content-type'];
+    if (headerContentType !== 'application/json') {
+        throw ServerError.badRequest();
+    }
+
+    // The data sent from the client lives inside req.headers['idempotency-key'] and req.body
+    const headerInput = {
+        idempotencyKey: req.headers['idempotency-key'],
+    };
+    const bodyInput = req.body;
+
+    const validHeader = loansHeaderSchema.safeParse(headerInput);
+    const validBody = loansBodySchema.safeParse(bodyInput);
+    const details = [];
+    if (!validHeader.success) {
+        details.push(...validationDetails(validHeader.error.issues, headerInput));
+    }
+    if (!validBody.success) {
+        details.push(...validationDetails(validBody.error.issues, bodyInput));
+    }
+    if (details.length > 0) {
+        throw ServerError.validation('Validation failed', details);
+    }
+
+    const { idempotencyKey } = validHeader.data;
+    const { member, book } = validBody.data;
+
+    const client = await req.db.connect();
+
+    try {
+        // Start the transaction
+        await client.query('BEGIN');
+        const loan = await borrowLoan(client, { member, book, idempotencyKey });
+        await client.query('COMMIT');
+        return res.status(201).json(loan);
+    } catch (err) {
+        // Rollback if any query failed
+        await client.query('ROLLBACK');
+
+        if (err.code === '23505' && err.constraint === 'uidx_borrowed_book_copy') {
+            throw ServerError.conflict('copy already taken, conflict');
+        } else if (err.code === '23505' && err.constraint === 'uidx_loans_idempotency_key') {
+            const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
+            if (existing) return res.status(201).json(existing);
+        }
+
+        // ServerError passes through the error handler as is; anything else becomes 500.
+        throw err;
+    } finally {
+        // CRITICAL: Always release the client back to the pool
+        client.release();
+    }
+});
+
+loansRouter.post('/:id/return', async (req, res) => {
+    const paramsInput = req.params;
+    const paramsValid = loansParamsSchema.safeParse(paramsInput);
+
+    if (!paramsValid.success) {
+        const details = validationDetails(paramsValid.error.issues, paramsInput);
+        throw ServerError.validation('Validation failed', details);
+    }
+
+    const { id: loanId } = paramsValid.data;
+
+    const client = await req.db.connect();
+
+    try {
+        // Start the transaction
+        await client.query('BEGIN');
+
+        const loan = await returnLoan(client, { loanId });
+
+        await client.query('COMMIT');
+        return res.status(200).json(loan);
+    } catch (err) {
+        // Rollback if any query failed
+        await client.query('ROLLBACK');
+
+        // ServerError passes through the error handler as is; anything else becomes 500.
+        throw err;
+    } finally {
+        // CRITICAL: Always release the client back to the pool
+        client.release();
+    }
+});
