@@ -53,7 +53,7 @@ Here: every endpoint against a real test Postgres (Docker), repositories/queries
 
 Auth-lite is HTTP contract (status + header), not limiter arithmetic (that is unit) and not a full user journey (that is E2E). These rows do not require seeded books.
 
-Error bodies (all endpoints): assert `statusCode`, `error`, and `message`; `requestId` is a UUID v4 and equals `X-Request-Id`. Do not deep-equal the whole body.
+Error bodies (all endpoints): assert `statusCode`, `error`, and `message`. Do not deep-equal the whole body. `requestId` (a UUID v4 equal to `X-Request-Id`) is produced by the request-id middleware and the central error handler, not by any route, so it is asserted once as a mechanism — in the auth-lite tests via `assertEnvelopeId` and in the unit test for the request id — rather than repeated in every endpoint's error case.
 
 ### Auth-lite: `X-API-Key` header
 
@@ -192,8 +192,7 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
 - **Why this level:** HTTP status mapping; no SQL
 - **Happy path:** n/a
 - **Error / edge:**
-  - `GET /books?page=0`, `page=-1`, `page=abc`, `page=1.5` => `400` `bad_request` (invalid query parameter; no `details`)
-  - `GET /books?per_page=0`, `per_page=-1`, `per_page=abc`, `per_page=1.5` => `400` `bad_request` (invalid query parameter; no `details`)
+  - `page` or `per_page` set to `0`, `-1`, `abc`, or `1.5` (one parameter at a time, the other absent) => `400` `bad_request` (invalid query parameter; no `details`). Same envelope for both parameters, so one parametrised test covers all eight URLs
 
 ### `POST /loans` — transactional borrow
 

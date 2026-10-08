@@ -336,8 +336,30 @@ describe('GET /books — pagination', () => {
 });
 
 describe('GET /books — invalid pagination parameters', () => {
-    describe('Happy path', () => {});
-    describe('Error / edge', () => {});
+    // Happy path: n/a
+    describe('Error / edge', () => {
+        test('page or per_page set to 0, -1, abc, 1.5 => 400 bad_request (invalid query parameter; no details)', async (t) => {
+            const invalidValues = ['0', '-1', 'abc', '1.5'];
+            const cases = ['page', 'per_page'].flatMap((param) =>
+                invalidValues.map((value) => ({ label: `GET /books?${param}=${value}`, query: `?${param}=${value}` })),
+            );
+
+            for (const { label, query } of cases) {
+                await t.test(label, async (tt) => {
+                    // Fresh server per case: eight requests on one server would trip the 5/min limiter (429).
+                    const { get } = await startServer(tt, { dbClient: pool });
+                    const res = await get(`/books${query}`, { 'X-API-Key': TEST_API_KEY });
+                    assert.equal(res.status, 400, `${label} returns 400`);
+                    const body = await res.json();
+
+                    assert.equal(body.statusCode, 400, `${label} returns statusCode 400`);
+                    assert.equal(body.error, 'bad_request', `${label} returns bad_request`);
+                    assert.equal(body.message, 'invalid query parameter', `${label} returns invalid query parameter`);
+                    assert.equal(body.details, undefined, `${label} has no details`);
+                });
+            }
+        });
+    });
 });
 
 after(() => pool.end());
