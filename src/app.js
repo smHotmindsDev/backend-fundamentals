@@ -1,6 +1,7 @@
 import express from 'express';
 import { topBooksRouter } from './routes/topBooks.js';
 import { loansRouter } from './routes/loans.js';
+import { booksRouter } from './routes/books.js';
 import requestLoggerMiddleware from './utils/requestLoggerMiddleware.js';
 import { createAuthMiddleware } from './utils/authMiddleware.js';
 import { createRateLimiter } from './utils/rateLimiter.js';
@@ -39,6 +40,7 @@ export function createApp({ env, dbClient, now = Date.now }) {
     // Attach application routes
     app.use('/reports/top-books', topBooksRouter);
     app.use('/loans', loansRouter);
+    app.use('/books', booksRouter);
 
     // Unmatched routes -> 404 envelope, then the central error handler last.
     app.use(routeNotFoundHandler);
