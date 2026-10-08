@@ -4,6 +4,9 @@ import { startServer, TEST_API_KEY } from '../helpers/http.js';
 import assert from 'node:assert/strict';
 
 const pool = createTestPool();
+// Seeded once per file, not per test: every case here is a GET and changes
+// nothing, and `node --test` runs each file in its own process, so no other
+// file can truncate the table while this one runs.
 await loadFixture(pool, 'pagination');
 
 describe('GET /books — pagination', () => {
