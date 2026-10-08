@@ -33,7 +33,7 @@ const assertEnvelopeId = async (res) => {
 };
 
 test('401 without API key carries requestId in header and body', async () => {
-    const res = await get('/reports/top-books');
+    const res = await get('/');
     assert.equal(res.status, 401);
     const { body } = await assertEnvelopeId(res);
     assert.equal(body.error, 'invalid_auth');
@@ -47,13 +47,13 @@ test('404 for an unknown route carries requestId in header and body', async () =
 });
 
 test('200 response still carries X-Request-Id', async () => {
-    const res = await get('/reports/top-books', { 'X-API-Key': API_KEY });
+    const res = await get('/', { 'X-API-Key': API_KEY });
     assert.equal(res.status, 200);
     assert.match(res.headers.get('x-request-id'), UUID_V4);
 });
 
 test('incoming X-Request-Id is ignored, server generates its own', async () => {
-    const res = await get('/reports/top-books', { 'X-API-Key': API_KEY, 'X-Request-Id': 'forged' });
+    const res = await get('/', { 'X-API-Key': API_KEY, 'X-Request-Id': 'forged' });
     const headerId = res.headers.get('x-request-id');
     assert.notEqual(headerId, 'forged');
     assert.match(headerId, UUID_V4);

@@ -37,6 +37,7 @@ Invalid value for `per_page=`: 0, negative numbers, letters, special characters.
 
 `search` is omitted, or present with an empty value (`search=`): no title filter. Same query as `GET /books` without `search`. A value of only spaces is a fragment, not empty.
 `search` with a non-empty value: literal substring of `title`. Any characters are accepted, including punctuation. `%`, `_`, and `\` in the client value are not `LIKE` wildcards — they match those characters in a title. No `400` for `search`; no match → `200` + `[]`.
+A title is free text and may itself contain any character, including `%`, `_`, and `\`; such titles must be findable by searching for those characters literally.
 
 ### Success
 
@@ -113,9 +114,9 @@ One author. This endpoint lists books; it does not read `book_copies` or `loans`
 
 What this fixture tests regarding query correctness:
 
-- 14 books with `LIMIT 10` — the second page exists and contains 4 items
+- 15 books with `LIMIT 10` — the second page exists and contains 5 items
 - `around the moon` (`…0010`) and `Around the Moon` (`…0013`) — verifying `ILIKE` case-insensitivity and the deterministic tie-breaker based on `book_id`
-- no title contains `%` or `_` — `search=%` and `search=_` must return `[]`, proving the fragment is literal, not a `LIKE` pattern
+- exactly one title contains `%` (`50% of the Earth`, `…0014`) and none contains `_` — `search=%25` and `search=50%25` must return only that book, `search=_` must return `[]`. An unescaped fragment would turn both into wildcards and return every book
 
 ### Expected response (`200`)
 
@@ -125,6 +126,7 @@ No `search`, default `per_page=10`. Computed from the fixture after `ORDER BY bo
 
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000014", "title": "50% of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000013", "title": "Around the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000012", "title": "The Mysterious Island", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000011", "title": "The Green Ray", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -133,15 +135,15 @@ No `search`, default `per_page=10`. Computed from the fixture after `ORDER BY bo
   { "book_id": "00000000-0000-0000-0000-000000000008", "title": "The Steam House", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000007", "title": "Robur the Conqueror", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000006", "title": "In Search of the Castaways", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
-  { "book_id": "00000000-0000-0000-0000-000000000005", "title": "Five Weeks in a Balloon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
-  { "book_id": "00000000-0000-0000-0000-000000000004", "title": "Michael Strogoff", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" }
+  { "book_id": "00000000-0000-0000-0000-000000000005", "title": "Five Weeks in a Balloon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" }
 ]
 ```
 
-`GET /books?page=2` — 4 items (last page, `length < per_page`):
+`GET /books?page=2` — 5 items (last page, `length < per_page`):
 
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000004", "title": "Michael Strogoff", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000003", "title": "From the Earth to the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000002", "title": "Journey to the Centre of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000001", "title": "Around the World in 80 Days", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -151,10 +153,11 @@ No `search`, default `per_page=10`. Computed from the fixture after `ORDER BY bo
 
 `GET /books?page=3` → `[]`.
 
-`GET /books?per_page=14`, `GET /books?per_page=100` — 14 items:
+`GET /books?per_page=15`, `GET /books?per_page=100` — 15 items:
 
 ```json
 [
+  { "book_id": "00000000-0000-0000-0000-000000000014", "title": "50% of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000013", "title": "Around the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000012", "title": "The Mysterious Island", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
   { "book_id": "00000000-0000-0000-0000-000000000011", "title": "The Green Ray", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01" },
@@ -174,7 +177,7 @@ No `search`, default `per_page=10`. Computed from the fixture after `ORDER BY bo
 
 `GET /books?search=` (empty value) — same body as `GET /books`.
 
-`GET /books?search=%` and `GET /books?search=_` → `[]`. On the wire the percent sign is `%25` (`search=%25`); a raw `search=%` is incomplete percent-encoding, not this case.
+`GET /books?search=%25` and `GET /books?search=50%25` → the single book `…0014` (`50% of the Earth`); `GET /books?search=_` → `[]`. On the wire the percent sign is `%25`; a raw `search=%` is incomplete percent-encoding, not this case.
 
 `GET /books?search=Around` — 3 items, `ORDER BY book_id DESC`:
 

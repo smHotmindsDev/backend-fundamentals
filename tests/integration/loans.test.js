@@ -278,6 +278,8 @@ describe('POST /loans — transactional borrow', () => {
                 ['not a uuid', 'not-a-uuid'],
                 // Valid RFC 4122 layout but version 1: the client must send v4
                 ['uuid v1 instead of v4', '00000000-0000-1000-8000-000000000009'],
+                // Present but not a string: zod reports invalid_type, which maps to `invalid_type`
+                ['number instead of string', 42],
             ];
 
             for (const [label, member] of cases) {
@@ -343,6 +345,28 @@ describe('POST /loans — transactional borrow', () => {
                 });
             }
         });
+        test('Body is not valid JSON returns 422 validation_error with details', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const idempotencyKey = crypto.randomUUID();
+
+            const bodyData = 'not json';
+
+            const res = await post('/loans', bodyData, {
+                'Idempotency-Key': idempotencyKey,
+            });
+
+            assert.equal(res.status, 422);
+            const body = await res.json();
+            assert.equal(body.error, 'validation_error');
+            assert.ok(Array.isArray(body.details), 'details must be an array');
+            assert.ok(
+                body.details.some((d) => d.field === 'body' && d.code === 'invalid_format'),
+                'details name the body',
+            );
+        });
+
         test('Missing or non-uuid-v4 Idempotency-Key header with a valid body returns 422 validation_error with details field Idempotency-Key, no row inserted', async (t) => {
             // Arrange: server on the real test DB, a body that is valid on its own
             const fixture = await loadFixture(pool, 'loans');
