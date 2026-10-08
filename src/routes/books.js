@@ -8,8 +8,8 @@ function escape(value) {
     return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
-async function baseQuery(client, { limit, offset }) {
-    return await client.query(
+async function baseQuery(db, { limit, offset }) {
+    return await db.query(
         `
         SELECT *
         FROM books
@@ -20,10 +20,10 @@ async function baseQuery(client, { limit, offset }) {
     );
 }
 
-async function searchQuery(client, { limit, offset, search }) {
+async function searchQuery(db, { limit, offset, search }) {
     const searchFragment = escape(search);
 
-    return await client.query(
+    return await db.query(
         `
         SELECT *
         FROM books
@@ -35,24 +35,18 @@ async function searchQuery(client, { limit, offset, search }) {
     );
 }
 
-booksRouter.get('/', async (req, res, next) => {
+booksRouter.get('/', async (req, res) => {
     const queryInput = req.query;
     const validQuery = booksQuerySchema.safeParse(queryInput);
     if (!validQuery.success) throw ServerError.badRequest('invalid query parameter');
-
-    const client = await req.db.connect();
 
     const { page, per_page: perPage, search } = validQuery.data;
 
     const { limit, offset } = createPagination({ page, perPage });
 
-    try {
-        const dbRes = search
-            ? await searchQuery(client, { limit, offset, search })
-            : await baseQuery(client, { limit, offset });
+    const dbRes = search
+        ? await searchQuery(req.db, { limit, offset, search })
+        : await baseQuery(req.db, { limit, offset });
 
-        return res.status(200).json(dbRes.rows);
-    } finally {
-        client.release();
-    }
+    return res.status(200).json(dbRes.rows);
 });

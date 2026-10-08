@@ -130,7 +130,7 @@ async function returnLoan(client, { loanId }) {
     return findLoanById(client, loanId);
 }
 
-loansRouter.post('/', async (req, res, next) => {
+loansRouter.post('/', async (req, res) => {
     const headerContentType = req.headers['content-type'];
     if (headerContentType !== 'application/json') {
         throw ServerError.badRequest();
@@ -185,7 +185,7 @@ loansRouter.post('/', async (req, res, next) => {
     }
 });
 
-loansRouter.post('/:id/return', async (req, res, next) => {
+loansRouter.post('/:id/return', async (req, res) => {
     const paramsInput = req.params;
     const paramsValid = loansParamsSchema.safeParse(paramsInput);
 
