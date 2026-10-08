@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { ERROR_CODES, MESSAGES } from '../../src/utils/ServerError.js';
 import { startServer, assertEnvelopeId, TEST_API_KEY } from '../helpers/http.js';
 
-const PATH = '/reports/top-books';
+const PATH = '/';
 
 test('valid X-API-Key → request continues', async (t) => {
     const { get } = await startServer(t);
