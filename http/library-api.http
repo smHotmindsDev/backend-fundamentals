@@ -1,0 +1,157 @@
+# Library API — manual requests for the WebStorm HTTP Client (no frontend in this
+# project, this file is the client). Each `###` block is one request: click the
+# gutter arrow next to it, or "Run all" from the top of the file.
+#
+# Setup
+#   1. Start Postgres and the API:  docker compose up -d && node --env-file=.env.development server.js
+#   2. Pick the `dev` environment (dropdown above the first request). Values come
+#      from http-client.env.json; override secrets and ids in
+#      http-client.private.env.json (git-ignored), e.g.
+#        { "dev": { "apiKey": "<API_KEY from .env.development>",
+#                   "memberId": "<uuid>", "bookId": "<uuid>" } }
+#   3. Seed data uses random uuids, so fetch real ones once:
+#        SELECT member_id FROM members LIMIT 1;
+#        -- a book with exactly one copy that is currently free (needed for the 409 demo)
+#        SELECT bc.book_id FROM book_copies bc
+#          LEFT JOIN loans l ON l.copy_id = bc.copy_id AND l.returned_at IS NULL
+#          GROUP BY bc.book_id HAVING count(*) = 1 AND count(l.loan_id) = 0 LIMIT 1;
+#
+# Rate limit: 5 requests per minute per key (docs/api-contracts/authentication.md).
+# "Run all" trips it after the fifth request — run blocks one by one, or restart
+# the server to reset the in-memory counter.
+
+### Health check
+GET {{baseUrl}}/
+X-API-Key: {{apiKey}}
+
+### Auth — missing key -> 401 invalid_auth
+GET {{baseUrl}}/
+
+### Auth — wrong key -> 401 (same message, no key enumeration)
+GET {{baseUrl}}/
+X-API-Key: definitely-not-the-key
+
+### Books — first page, default per_page=10
+GET {{baseUrl}}/books
+X-API-Key: {{apiKey}}
+
+### Books — explicit page and per_page
+GET {{baseUrl}}/books?page=2&per_page=5
+X-API-Key: {{apiKey}}
+
+### Books — search by title fragment (case-insensitive ILIKE)
+GET {{baseUrl}}/books?search=forest
+X-API-Key: {{apiKey}}
+
+### Books — invalid query (page=0) -> 400 bad_request
+GET {{baseUrl}}/books?page=0
+X-API-Key: {{apiKey}}
+
+### Report — top 10 most borrowed books, last 90 days
+GET {{baseUrl}}/reports/top-books
+X-API-Key: {{apiKey}}
+
+### Loans — borrow a book -> 201 (one-copy book from the env, see header)
+# The Idempotency-Key is remembered so the next block can replay the same request.
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{$uuid}}
+
+{
+  "member": "{{memberId}}",
+  "book": "{{bookId}}"
+}
+
+> {%
+    client.test("borrow created", () => client.assert(response.status === 201, "expected 201"));
+    client.global.set("loanId", response.body.loan_id);
+    client.global.set("idemKey", request.headers.findByName("Idempotency-Key").tryGetSubstitutedValue());
+%}
+
+### Loans — retry with the SAME Idempotency-Key -> 201 with the same loan_id, no second loan
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{idemKey}}
+
+{
+  "member": "{{memberId}}",
+  "book": "{{bookId}}"
+}
+
+> {%
+    client.test("same loan replayed", () => client.assert(response.body.loan_id === client.global.get("loanId"), "loan_id differs"));
+%}
+
+### Loans — NEW key for a book whose only copy is out -> 409 conflict
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{$uuid}}
+
+{
+  "member": "{{memberId}}",
+  "book": "{{bookId}}"
+}
+
+### Loans — return -> 200 with returned_at set
+POST {{baseUrl}}/loans/{{loanId}}/return
+X-API-Key: {{apiKey}}
+
+### Loans — return again -> 200, same row, no error (idempotent)
+POST {{baseUrl}}/loans/{{loanId}}/return
+X-API-Key: {{apiKey}}
+
+### Loans — unknown loan id -> 404 not_found
+POST {{baseUrl}}/loans/00000000-0000-4000-8000-000000000000/return
+X-API-Key: {{apiKey}}
+
+### Loans — malformed id -> 422 validation_error
+POST {{baseUrl}}/loans/not-a-uuid/return
+X-API-Key: {{apiKey}}
+
+### Loans — unknown member -> 404 not_found
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{$uuid}}
+
+{
+  "member": "00000000-0000-4000-8000-000000000000",
+  "book": "{{bookId}}"
+}
+
+### Loans — missing Idempotency-Key and wrong field types -> 422 with details[]
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "member": 42,
+  "book": "{{bookId}}"
+}
+
+### Loans — body that is not valid JSON -> 422
+POST {{baseUrl}}/loans
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{$uuid}}
+
+{ "member": 
+
+### Loans — wrong Content-Type -> 400 bad_request
+POST {{baseUrl}}/loans
+Content-Type: text/plain
+X-API-Key: {{apiKey}}
+Idempotency-Key: {{$uuid}}
+
+member={{memberId}}&book={{bookId}}
+
+### Unknown route -> 404
+GET {{baseUrl}}/nope
+X-API-Key: {{apiKey}}
+
+### Rate limit — run this 6 times within a minute; the 6th answers 429 + Retry-After
+GET {{baseUrl}}/
+X-API-Key: {{apiKey}}

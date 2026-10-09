@@ -56,3 +56,6 @@ lorem-500mb.json
 
 .obsidian
 .cursor
+
+# WebStorm HTTP Client — private overrides (real API key, local ids)
+http-client.private.env.json
