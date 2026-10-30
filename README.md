@@ -79,6 +79,7 @@ Optional body: the WHY, not the what.
 - Atomic commits: one logical change each. "WIP" and "fixes" commits get squashed before the PR (`git rebase -i` — learn it here).
 - The experiment tasks (A3, B2, B3) must keep the *broken* version in history: commit the naive/racy implementation first, then the fix as a separate commit. The diff between them **is** the lesson.
 - Never commit: `.env`, `node_modules`, generated data dumps. Write the `.gitignore` in the first commit.
+- Local `.env` values are kept in Apple Passwords, entries `Backend Fundamentals — dev`, `— development`, `— test` and `— production demo`.
 
 **Definition of Done addition:** `git log --oneline` reads as a coherent story of the project; any commit can be understood without opening the diff.
 
