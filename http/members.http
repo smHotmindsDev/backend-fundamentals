@@ -1,0 +1,42 @@
+### GET /members — default page (50 items)
+GET {{host}}/members
+X-API-Key: {{apiKey}}
+
+### GET /members — 2 items
+GET {{host}}/members?per_page=2
+X-API-Key: {{apiKey}}
+
+### GET /members — page 2
+GET {{host}}/members?page=2
+X-API-Key: {{apiKey}}
+
+### GET /members — per_page above the cap (expect at most 100)
+GET {{host}}/members?per_page=101
+X-API-Key: {{apiKey}}
+
+### GET /members — search by name
+GET {{host}}/members?search=lee
+X-API-Key: {{apiKey}}
+
+### GET /members — search spanning the space
+GET {{host}}/members?search=na%20Ha
+X-API-Key: {{apiKey}}
+
+### GET /members — literal underscore
+GET {{host}}/members?search=_
+X-API-Key: {{apiKey}}
+
+### GET /members — literal percent (expect [])
+GET {{host}}/members?search=%25
+X-API-Key: {{apiKey}}
+
+### GET /members — invalid page (expect 400)
+GET {{host}}/members?page=0
+X-API-Key: {{apiKey}}
+
+### GET /members — invalid per_page (expect 400)
+GET {{host}}/members?per_page=abc
+X-API-Key: {{apiKey}}
+
+### GET /members — no API key (expect 401)
+GET {{host}}/members
