@@ -56,3 +56,6 @@ lorem-500mb.json
 
 .obsidian
 .cursor
+
+# PhpStorm HTTP client secrets (API key)
+http-client.private.env.json
