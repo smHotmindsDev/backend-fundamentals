@@ -1,0 +1,97 @@
+import { Router } from 'express';
+import { membersQuerySchema } from '../schemas/members.js';
+import { escape } from '../utils/escape.js';
+import { createPagination } from '../utils/pagination.js';
+import ServerError from '../utils/ServerError.js';
+export const membersRouter = Router();
+
+async function baseQueryToMembers(db, { limit, offset }) {
+    const res = await db.query(
+        `
+        SELECT members.member_id,
+               members.first_name,
+               members.last_name
+        FROM members
+        ORDER BY member_id DESC
+        LIMIT $1 OFFSET $2;
+        `,
+        [limit, offset],
+    );
+
+    return res.rows;
+}
+
+async function searchQueryToMembers(db, { limit, offset, search }) {
+    const searchFragment = escape(search);
+
+    const res = await db.query(
+        `
+        SELECT members.member_id,
+               members.first_name,
+               members.last_name
+         FROM members
+        WHERE members.first_name || ' ' || members.last_name ILIKE '%' || $3 || '%' ESCAPE '\\'
+        ORDER BY member_id DESC
+        LIMIT $1 OFFSET $2;
+        `,
+        [limit, offset, searchFragment],
+    );
+
+    return res.rows;
+}
+
+async function baseQueryToLoans(db, { member }) {
+    const res = await db.query(
+        `
+        SELECT loans.loan_id,
+               loans.book,
+               loans.borrowed_at,
+               loans.due_at
+        FROM loans
+        WHERE loans.member=$1 AND loans.returned_at IS NULL
+        ORDER BY loans.loan_id DESC
+        `,
+        [member],
+    );
+
+    return res.rows;
+}
+
+membersRouter.get('/', async (req, res) => {
+    const queryInput = req.query;
+    const validQuery = membersQuerySchema.safeParse(queryInput);
+    if (!validQuery.success) throw ServerError.badRequest('invalid query parameter');
+
+    const { page, per_page: perPage, search } = validQuery.data;
+
+    const { limit, offset } = createPagination({ page, perPage });
+
+    const members = search
+        ? await searchQueryToMembers(req.db, { limit, offset, search })
+        : await baseQueryToMembers(req.db, { limit, offset });
+
+    if (members.length === 0) {
+        return res.status(200).json([]);
+    }
+
+    const map = new Map();
+
+    for (const member of members) {
+        const { member_id, first_name, last_name } = member;
+
+        const loans = await baseQueryToLoans(req.db, { member: member_id });
+
+        const member_details = {
+            member_id,
+            first_name,
+            last_name,
+            loans,
+        };
+
+        map.set(member_id, member_details);
+    }
+
+    const merged = Array.from(map.values());
+
+    return res.status(200).json(merged);
+});
