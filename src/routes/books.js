@@ -1,12 +1,9 @@
 import { Router } from 'express';
 import { booksQuerySchema } from '../schemas/books.js';
 import { createPagination } from '../utils/pagination.js';
+import { escape } from '../utils/escape.js';
 import ServerError from '../utils/ServerError.js';
 export const booksRouter = Router();
-
-function escape(value) {
-    return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
 
 async function baseQuery(db, { limit, offset }) {
     return await db.query(
