@@ -98,10 +98,16 @@ None.
 
 - **Query budget: at most 2 SQL statements per HTTP request, independent of `per_page`** — one for the page of members, one for all their open loans (skipped when the page is empty). A per-member loans query would cost 1 + `per_page` statements. The integration test counts statements through the injected `dbClient` and fails above 2.
 - No response-time budget is set for this endpoint in the README; the deliverable of the lab is the comparison below.
-- Measured on the dev dataset (10,000 members, 500,000 loans), `GET /members` page 1 with 50 members — _to be filled in after both commits_:
-  - naive, 1 + N: __ statements, __ ms
-  - batch, 1 + 1: 2 statements, __ ms
+- Measured on the dev dataset (10,000 members, 500,000 loans), `GET /members` page 1 with 50 members (response time in the PhpStorm HTTP client, `http/members.http`; mean of 5 runs, cold start excluded):
+  - naive, 1 + N: 51 statements, 32 ms
+  - batch, 1 + 1: 2 statements, 10 ms
 - Indexes: the loans query uses `idx_loans_member_returned` (`member, returned_at`). The search query compares a concatenation, so no index applies and `members` is scanned sequentially.
+- Conclusion:
+  - The naive version sends 1 + N statements, where N is the number of members on the page; the batched version sends at most 2, whatever the page size.
+  - With the database on another server the gap grows: here it is about 3× (51 → 2 statements, 32 → 10 ms) on localhost, but every statement also pays the network round trip between the app server and the database server.
+  - An ORM hides the moment a query runs: fetching data over the network can look like reading a property, the way JavaScript hides the machine instructions that assembly shows explicitly. This is what ORMs do to you silently.
+  - The fix here is one batched loans query for the whole page (`member = ANY($1)`); a JOIN would work too. ORM tooling is not covered yet.
+  - The query count is kept under control by logging it per request (`dbCalls`) and by the query-budget integration tests.
 
 ### Pagination Math
 Limit-offset pagination is straightforward and involves two main parameters:
