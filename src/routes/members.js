@@ -40,18 +40,19 @@ async function searchQueryToMembers(db, { limit, offset, search }) {
     return res.rows;
 }
 
-async function baseQueryToLoans(db, { member }) {
+async function baseQueryToLoans(db, { memberIds }) {
     const res = await db.query(
         `
         SELECT loans.loan_id,
+               loans.member,
                loans.book,
                loans.borrowed_at,
                loans.due_at
         FROM loans
-        WHERE loans.member=$1 AND loans.returned_at IS NULL
+        WHERE loans.member = ANY($1) AND loans.returned_at IS NULL
         ORDER BY loans.loan_id DESC
         `,
-        [member],
+        [memberIds],
     );
 
     return res.rows;
@@ -74,24 +75,26 @@ membersRouter.get('/', async (req, res) => {
         return res.status(200).json([]);
     }
 
-    const map = new Map();
+    const memberIds = members.map((m) => m.member_id);
 
-    for (const member of members) {
-        const { member_id, first_name, last_name } = member;
+    const loans = await baseQueryToLoans(req.db, { memberIds });
 
-        const loans = await baseQueryToLoans(req.db, { member: member_id });
+    const loansByMember = new Map();
+    for (const loan of loans) {
+        if (!loansByMember.has(loan.member)) {
+            loansByMember.set(loan.member, []);
+        }
 
-        const member_details = {
-            member_id,
-            first_name,
-            last_name,
-            loans,
-        };
-
-        map.set(member_id, member_details);
+        const { member, ...loanData } = loan;
+        loansByMember.get(member).push(loanData);
     }
 
-    const merged = Array.from(map.values());
+    const result = members.map((member) => ({
+        member_id: member.member_id,
+        first_name: member.first_name,
+        last_name: member.last_name,
+        loans: loansByMember.get(member.member_id) || [],
+    }));
 
-    return res.status(200).json(merged);
+    return res.status(200).json(result);
 });
