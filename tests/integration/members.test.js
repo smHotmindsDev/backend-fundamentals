@@ -9,6 +9,20 @@ const pool = createTestPool();
 // file can truncate the table while this one runs.
 await loadFixture(pool, 'members');
 
+function queryCounter(original) {
+    let calls = 0;
+
+    return {
+        db: {
+            query(...args) {
+                calls++;
+                return original.query(...args);
+            },
+        },
+        calls: () => calls,
+    };
+}
+
 // Expected bodies from docs/test-plan.md, computed by hand from members-fixture.json:
 // ORDER BY member_id DESC; inside each member `loans` is ORDER BY loan_id DESC,
 // only open loans (returned_at IS NULL).
@@ -344,10 +358,36 @@ describe('GET /members — B4. N+1 lab', () => {
 });
 
 describe('GET /members — query budget (N+1)', () => {
-    // B4 is Manual-only in the README ("the B4 N+1 fix locked in by a test"): written by hand.
-    test.todo('GET /members (page 1, 50 members) => at most 2 SQL statements');
-    test.todo('GET /members?page=2 (5 members) => at most 2 SQL statements');
-    test.todo('GET /members?page=3 (empty page) => 1 SQL statement: the loans query is skipped');
+    test('GET /members (page 1, 50 members) => at most 2 SQL statements', async (t) => {
+        const counter = queryCounter(pool);
+        const { get } = await startServer(t, { dbClient: counter.db });
+        const res = await get(`/members`, { 'X-API-Key': TEST_API_KEY });
+        assert.equal(res.status, 200, `GET /members returns 200`);
+        const body = await res.json();
+        assert.equal(body.length, 50, `GET /members returns 50 members`);
+        const count = counter.calls();
+        assert.ok(count <= 2, `GET /members sends at most 2 SQL statements, got ${count}`);
+    });
+    test('GET /members?page=2 (5 members) => at most 2 SQL statements', async (t) => {
+        const counter = queryCounter(pool);
+        const { get } = await startServer(t, { dbClient: counter.db });
+        const res = await get(`/members?page=2`, { 'X-API-Key': TEST_API_KEY });
+        assert.equal(res.status, 200, `GET /members?page=2 returns 200`);
+        const body = await res.json();
+        assert.equal(body.length, 5, `GET /members?page=2 returns 5 members`);
+        const count = counter.calls();
+        assert.ok(count <= 2, `GET /members?page=2 sends at most 2 SQL statements, got ${count}`);
+    });
+    test('GET /members?page=3 (empty page) => 1 SQL statement: the loans query is skipped', async (t) => {
+        const counter = queryCounter(pool);
+        const { get } = await startServer(t, { dbClient: counter.db });
+        const res = await get(`/members?page=3`, { 'X-API-Key': TEST_API_KEY });
+        assert.equal(res.status, 200, `GET /members?page=3 returns 200`);
+        const body = await res.json();
+        assert.equal(body.length, 0, `GET /members?page=3 returns 0 members`);
+        const count = counter.calls();
+        assert.equal(count, 1, `GET /members?page=3 sends 1 SQL statement`);
+    });
 });
 
 describe('GET /members — invalid pagination parameters', () => {
