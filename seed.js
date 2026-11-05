@@ -290,23 +290,27 @@ async function seed() {
             CROSS JOIN LATERAL generate_series(1, sb.total_copies);
         `);
 
-        console.log(`Inserting ${LOANS} loans (this is the slow step)...`);
+        // loans.copy_id is NOT NULL (0019) and one copy holds at most one open loan (0020),
+        // so loans are generated, capped and given copies in a temp table first.
+        console.log(`Generating ${LOANS} loans...`);
         await client.query(`
+            CREATE TEMP TABLE seed_loans AS
             WITH ids AS (
                 SELECT
                     (SELECT array_agg(member_id ORDER BY n) FROM seed_members WHERE n <= ${borrowableMembers}) AS member_ids,
                     (SELECT array_agg(book_id ORDER BY n) FROM seed_books WHERE n <= ${borrowableBooks}) AS book_ids
             )
-            INSERT INTO loans (member, book, borrowed_at, due_at, returned_at)
             SELECT
-                member_ids[1 + ((i - 1) % ${borrowableMembers})],
-                book_ids[1 + (((i - 1) * 17) % ${borrowableBooks})],
+                i,
+                member_ids[1 + ((i - 1) % ${borrowableMembers})] AS member,
+                book_ids[1 + (((i - 1) * 17) % ${borrowableBooks})] AS book,
                 borrowed_at,
-                borrowed_at + 14,
+                borrowed_at + 14 AS due_at,
                 CASE
                     WHEN i % 10 < 8 THEN borrowed_at + (1 + (i % 13))
                     ELSE NULL
-                END
+                END AS returned_at,
+                NULL::uuid AS copy_id
             FROM ids,
                  generate_series(1, ${LOANS}) AS g(i),
                  LATERAL (SELECT (CURRENT_DATE - (1 + ((i * 13) % 540)))::date AS borrowed_at) AS d;
@@ -321,17 +325,17 @@ async function seed() {
             ),
             ranked AS (
                 SELECT
-                    l.loan_id,
+                    l.i,
                     COALESCE(c.n_copies, 0) AS n_copies,
-                    row_number() OVER (PARTITION BY l.book ORDER BY l.borrowed_at DESC) AS rn
-                FROM loans l
+                    row_number() OVER (PARTITION BY l.book ORDER BY l.borrowed_at DESC, l.i DESC) AS rn
+                FROM seed_loans l
                 LEFT JOIN copy_counts c ON c.book_id = l.book
                 WHERE l.returned_at IS NULL
             )
-            UPDATE loans l
+            UPDATE seed_loans l
             SET returned_at = l.due_at
             FROM ranked r
-            WHERE l.loan_id = r.loan_id
+            WHERE l.i = r.i
               AND r.rn > r.n_copies;
         `);
 
@@ -347,17 +351,17 @@ async function seed() {
             ),
             ranked_loans AS (
                 SELECT
-                    loan_id,
+                    i,
                     book,
                     returned_at IS NULL AS is_open,
                     row_number() OVER (
                         PARTITION BY book, (returned_at IS NULL)
-                        ORDER BY borrowed_at, loan_id
+                        ORDER BY borrowed_at, i
                     ) AS rn
-                FROM loans
+                FROM seed_loans
                 WHERE copy_id IS NULL
             )
-            UPDATE loans l
+            UPDATE seed_loans l
             SET copy_id = nc.copy_id
             FROM ranked_loans rl
             JOIN numbered_copies nc
@@ -367,8 +371,16 @@ async function seed() {
                  WHEN rl.is_open THEN rl.rn
                  ELSE ((rl.rn - 1) % nc.n_copies) + 1
              END
-            WHERE l.loan_id = rl.loan_id
+            WHERE l.i = rl.i
               AND l.copy_id IS NULL;
+        `);
+
+        console.log(`Inserting ${LOANS} loans (this is the slow step)...`);
+        await client.query(`
+            INSERT INTO loans (member, book, copy_id, borrowed_at, due_at, returned_at, idempotency_key)
+            SELECT member, book, copy_id, borrowed_at, due_at, returned_at, gen_random_uuid()
+            FROM seed_loans
+            ORDER BY i;
         `);
 
         await client.query('COMMIT');
