@@ -193,6 +193,7 @@ loansRouter.post('/', async (req, res) => {
         // ServerError passes through the error handler as is; anything else becomes 500.
         throw err;
     } finally {
+        // The uncovered branch reported on this line is not finally itself (it always runs): V8 marks the point where catch would finish without return or throw, and catch here always returns or throws
         // CRITICAL: Always release the client back to the pool
         client.release();
     }
@@ -226,6 +227,7 @@ loansRouter.post('/:id/return', async (req, res) => {
         // ServerError passes through the error handler as is; anything else becomes 500.
         throw err;
     } finally {
+        // The uncovered branch reported on this line is not finally itself (it always runs): V8 marks the point where catch would finish without return or throw, and catch here always returns or throws
         // CRITICAL: Always release the client back to the pool
         client.release();
     }
