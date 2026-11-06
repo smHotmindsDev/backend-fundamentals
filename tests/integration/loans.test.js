@@ -40,6 +40,11 @@ function holdAfterEmptyKeyLookup(pool) {
     );
 
     return {
+        // How many calls stopped at the gate. A race test asserts 2: if the key lookup SQL changes
+        // and stops matching below, nothing is held and the test would run without the race.
+        get arrived() {
+            return arrived;
+        },
         async connect() {
             const client = await pool.connect();
             let passed = false;
@@ -176,7 +181,8 @@ describe('POST /loans — transactional borrow', () => {
         test('Parallel calls with the same Idempotency-Key for Anna and Available Book: both return 201 with the same loan_id, one row inserted', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const fixture = await loadFixture(pool, 'loans');
-            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
+            const dbClient = holdAfterEmptyKeyLookup(pool);
+            const { post } = await startServer(t, { dbClient });
             const member = fixture.members.find((m) => m.first_name === 'Anna').member_id;
             const book = fixture.books.find((b) => b.title === 'Available Book').book_id;
             const idempotencyKey = crypto.randomUUID();
@@ -191,6 +197,7 @@ describe('POST /loans — transactional borrow', () => {
                 callToCreate(post, bodyData, idempotencyKey),
                 callToCreate(post, bodyData, idempotencyKey),
             ]);
+            assert.equal(dbClient.arrived, 2, 'Both calls were held after the key lookup');
 
             const [bodyA, bodyB] = await Promise.all([resA.json(), resB.json()]);
 
@@ -548,7 +555,8 @@ describe('POST /loans — transactional borrow', () => {
         test('Parallel calls with the same Idempotency-Key for Anna, Available Book and Multi-Copy Book: one 201, one 422 without details, one row', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const fixture = await loadFixture(pool, 'loans');
-            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
+            const dbClient = holdAfterEmptyKeyLookup(pool);
+            const { post } = await startServer(t, { dbClient });
             const member = fixture.members.find((m) => m.first_name === 'Anna').member_id;
             const availableBook = fixture.books.find((b) => b.title === 'Available Book').book_id;
             const multiCopyBook = fixture.books.find((b) => b.title === 'Multi-Copy Book').book_id;
@@ -565,6 +573,7 @@ describe('POST /loans — transactional borrow', () => {
                 callToCreate(post, bodyDataA, idempotencyKey),
                 callToCreate(post, bodyDataB, idempotencyKey),
             ]);
+            assert.equal(dbClient.arrived, 2, 'Both calls were held after the key lookup');
             const bodyA = await resA.json();
             const bodyB = await resB.json();
 
@@ -600,7 +609,8 @@ describe('POST /loans — double-borrow race', () => {
         test('Parallel calls from Anna and Boris to contested book: exactly one 201 (with loans row), one 409, only one open loan and correct member', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const fixture = await loadFixture(pool, 'loans');
-            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
+            const dbClient = holdAfterEmptyKeyLookup(pool);
+            const { post } = await startServer(t, { dbClient });
             const memberA = fixture.members.find((m) => m.first_name === 'Anna').member_id;
             const memberB = fixture.members.find((m) => m.first_name === 'Boris').member_id;
             const book = fixture.books.find((b) => b.title === 'Contested Book').book_id;
@@ -618,6 +628,7 @@ describe('POST /loans — double-borrow race', () => {
                 callToCreate(post, bodyDataA, idempotencyKeyA),
                 callToCreate(post, bodyDataB, idempotencyKeyB),
             ]);
+            assert.equal(dbClient.arrived, 2, 'Both calls were held after the key lookup');
             const bodyA = await resA.json();
             const bodyB = await resB.json();
 
