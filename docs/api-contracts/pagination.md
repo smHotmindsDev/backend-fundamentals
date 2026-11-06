@@ -85,6 +85,8 @@ However, behind the scenes, these pages are converted to limit-offset using the 
 - `LIMIT $1`, where $1 is `per_page` parameter.
 - `OFFSET = ($2 - 1) * $1`, where $1 is `per_page` parameter; $2 - `page` parameter.
 
+Why a deep OFFSET is expensive and how keyset pagination compares, with EXPLAIN ANALYZE on `books`: [OFFSET and Keyset](../pagination.md).
+
 ### Query
 ```sql
 SELECT * 
