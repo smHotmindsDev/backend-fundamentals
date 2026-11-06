@@ -21,6 +21,57 @@ const countLoans = async () => (await pool.query('SELECT count(*)::int AS n FROM
 const getCopy = async (loanId) =>
     (await pool.query('SELECT copy_id FROM loans WHERE loan_id = $1', [loanId])).rows[0].copy_id;
 
+// Both borrows pass the idempotency-key lookup before either inserts.
+// The second lookup on a client, after a 23505 rollback, does not wait.
+function holdAfterEmptyKeyLookup(pool) {
+    let arrived = 0;
+    let release;
+    let fail;
+    const gate = new Promise((resolve, reject) => {
+        release = resolve;
+        fail = reject;
+    });
+    const timer = setTimeout(() => {
+        fail(new Error('second borrow did not reach the empty idempotency-key lookup'));
+    }, 2000);
+    gate.then(
+        () => clearTimeout(timer),
+        () => clearTimeout(timer),
+    );
+
+    return {
+        async connect() {
+            const client = await pool.connect();
+            let passed = false;
+            return {
+                async query(...args) {
+                    const result = await client.query(...args);
+                    const sql = args[0];
+                    const keyLookup =
+                        typeof sql === 'string' && sql.includes('SELECT') && sql.includes('idempotency_key');
+                    if (!passed && keyLookup) {
+                        passed = true;
+                        if (result.rows.length !== 0) {
+                            const error = new Error(
+                                'idempotency-key lookup returned a row; the race window was missed',
+                            );
+                            fail(error);
+                            throw error;
+                        }
+                        arrived += 1;
+                        if (arrived === 2) release();
+                        await gate;
+                    }
+                    return result;
+                },
+                release() {
+                    client.release();
+                },
+            };
+        },
+    };
+}
+
 describe('POST /loans — transactional borrow', () => {
     describe('Happy path', () => {
         test('Anna + Available Book, fresh Idempotency-Key returns 201 and creates loans row with correct fields', async (t) => {
@@ -98,10 +149,34 @@ describe('POST /loans — transactional borrow', () => {
                 'Same call repeated with same Idempotency-Key no second row inserted',
             );
         });
+        test('Same call repeated with uppercase member and book uuids returns 201 with the same loan, no second row', async (t) => {
+            // Arrange: the schema keeps the client's case; Postgres stores uuid in lowercase.
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const member = fixture.members.find((m) => m.first_name === 'Anna').member_id.toUpperCase();
+            const book = fixture.books.find((b) => b.title === 'Available Book').book_id.toUpperCase();
+            const idempotencyKey = crypto.randomUUID().toUpperCase();
+            const bodyData = { member, book };
+
+            // Act: the lost-response retry sends the same uppercase body again.
+            const resFirst = await callToCreate(post, bodyData, idempotencyKey);
+            const loansBefore = await countLoans();
+            const bodyBefore = await resFirst.json();
+            const resSecond = await callToCreate(post, bodyData, idempotencyKey);
+            const loansAfter = await countLoans();
+            const bodyAfter = await resSecond.json();
+
+            assert.equal(resFirst.status, 201, 'First call returns 201');
+            assert.equal(bodyBefore.member, member.toLowerCase(), 'the stored member is lowercase');
+            assert.equal(bodyBefore.book, book.toLowerCase(), 'the stored book is lowercase');
+            assert.equal(resSecond.status, 201, 'Retry with the same uppercase uuids returns 201');
+            assert.deepEqual(bodyAfter, bodyBefore, 'Retry returns the loan created by the first request');
+            assert.equal(loansAfter, loansBefore, 'no second row inserted');
+        });
         test('Parallel calls with the same Idempotency-Key for Anna and Available Book: both return 201 with the same loan_id, one row inserted', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const fixture = await loadFixture(pool, 'loans');
-            const { post } = await startServer(t, { dbClient: pool });
+            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
             const member = fixture.members.find((m) => m.first_name === 'Anna').member_id;
             const book = fixture.books.find((b) => b.title === 'Available Book').book_id;
             const idempotencyKey = crypto.randomUUID();
@@ -111,6 +186,7 @@ describe('POST /loans — transactional borrow', () => {
             const loansBefore = await countLoans();
 
             // Act: two parallel calls with the same idempotency key.
+            // Held after the key lookup returns no row; both released only then.
             const [resA, resB] = await Promise.all([
                 callToCreate(post, bodyData, idempotencyKey),
                 callToCreate(post, bodyData, idempotencyKey),
@@ -407,6 +483,115 @@ describe('POST /loans — transactional borrow', () => {
                 });
             }
         });
+        test('Same Idempotency-Key, Anna, Available Book then Multi-Copy Book returns 422 without details, one loans row', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const member = fixture.members.find((m) => m.first_name === 'Anna').member_id;
+            const availableBook = fixture.books.find((b) => b.title === 'Available Book').book_id;
+            const multiCopyBook = fixture.books.find((b) => b.title === 'Multi-Copy Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+
+            // Act: the key is spent on Available Book, then reused for another book
+            const resFirst = await callToCreate(post, { member, book: availableBook }, idempotencyKey);
+            const resSecond = await callToCreate(post, { member, book: multiCopyBook }, idempotencyKey);
+
+            // Assert 1: the first call creates the loan, the second is a mismatched retry
+            assert.equal(resFirst.status, 201, 'First call returns 201');
+            const firstBody = await resFirst.json();
+            assert.equal(resSecond.status, 422, 'Second call returns 422');
+            const secondBody = await resSecond.json();
+            assert.equal(secondBody.statusCode, 422);
+            assert.equal(secondBody.error, 'validation_error');
+            assert.equal(secondBody.message, 'Idempotency-Key already used with a different member or book');
+            assert.equal('details' in secondBody, false, 'a reused key has no details key');
+
+            // Assert 2: the key still belongs to the Available Book loan only
+            const { rows } = await pool.query('SELECT loan_id, book FROM loans WHERE idempotency_key = $1', [
+                idempotencyKey,
+            ]);
+            assert.equal(rows.length, 1, 'exactly one loans row for that key');
+            assert.equal(rows[0].loan_id, firstBody.loan_id);
+            assert.equal(rows[0].book, availableBook, 'the row is the Available Book loan');
+        });
+        test('Same Idempotency-Key, Anna then Boris, same Available Book returns 422 without details, no second row', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const anna = fixture.members.find((m) => m.first_name === 'Anna').member_id;
+            const boris = fixture.members.find((m) => m.first_name === 'Boris').member_id;
+            const book = fixture.books.find((b) => b.title === 'Available Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+
+            // Act: the key is spent on Anna, then reused by Boris for the same book
+            const resFirst = await callToCreate(post, { member: anna, book }, idempotencyKey);
+            const resSecond = await callToCreate(post, { member: boris, book }, idempotencyKey);
+
+            // Assert 1: the first call creates the loan, the second is a mismatched retry
+            assert.equal(resFirst.status, 201, 'First call returns 201');
+            const firstBody = await resFirst.json();
+            assert.equal(resSecond.status, 422, 'Second call returns 422');
+            const secondBody = await resSecond.json();
+            assert.equal(secondBody.statusCode, 422);
+            assert.equal(secondBody.error, 'validation_error');
+            assert.equal(secondBody.message, 'Idempotency-Key already used with a different member or book');
+            assert.equal('details' in secondBody, false, 'a reused key has no details key');
+
+            // Assert 2: the key still belongs to Anna's loan only
+            const { rows } = await pool.query('SELECT loan_id, member FROM loans WHERE idempotency_key = $1', [
+                idempotencyKey,
+            ]);
+            assert.equal(rows.length, 1, 'no second loans row for that key');
+            assert.equal(rows[0].loan_id, firstBody.loan_id);
+            assert.equal(rows[0].member, anna, "the row is still Anna's loan");
+        });
+        test('Parallel calls with the same Idempotency-Key for Anna, Available Book and Multi-Copy Book: one 201, one 422 without details, one row', async (t) => {
+            // Arrange: a server on the real test DB, and the input for this case
+            const fixture = await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
+            const member = fixture.members.find((m) => m.first_name === 'Anna').member_id;
+            const availableBook = fixture.books.find((b) => b.title === 'Available Book').book_id;
+            const multiCopyBook = fixture.books.find((b) => b.title === 'Multi-Copy Book').book_id;
+            const idempotencyKey = crypto.randomUUID();
+            const bodyDataA = { member, book: availableBook };
+            const bodyDataB = { member, book: multiCopyBook };
+
+            // Arrange: baseline count before any request is in flight.
+            const loansBefore = await countLoans();
+
+            // Act: two parallel calls with the same idempotency key.
+            // Held after the key lookup returns no row; both released only then.
+            const [resA, resB] = await Promise.all([
+                callToCreate(post, bodyDataA, idempotencyKey),
+                callToCreate(post, bodyDataB, idempotencyKey),
+            ]);
+            const bodyA = await resA.json();
+            const bodyB = await resB.json();
+
+            const loansAfter = await countLoans();
+
+            const responses = [
+                { status: resA.status, body: bodyA },
+                { status: resB.status, body: bodyB },
+            ];
+            const successResponse = responses.find((r) => r.status === 201);
+            const rejectedResponse = responses.find((r) => r.status === 422);
+
+            assert.ok(successResponse, 'One call returns 201');
+            assert.ok(rejectedResponse, 'One call returns 422');
+            assert.equal(loansAfter, loansBefore + 1, 'Exactly one loan row inserted');
+            assert.equal(rejectedResponse.body.statusCode, 422);
+            assert.equal(rejectedResponse.body.error, 'validation_error');
+            assert.equal(rejectedResponse.body.message, 'Idempotency-Key already used with a different member or book');
+            assert.equal('details' in rejectedResponse.body, false, 'a reused key has no details key');
+
+            const { rows } = await pool.query('SELECT loan_id, book FROM loans WHERE idempotency_key = $1', [
+                idempotencyKey,
+            ]);
+            assert.equal(rows.length, 1, 'exactly one loans row for that key');
+            assert.equal(rows[0].loan_id, successResponse.body.loan_id);
+            assert.equal(rows[0].book, successResponse.body.book, 'the row book equals book in the 201');
+        });
     });
 });
 
@@ -415,7 +600,7 @@ describe('POST /loans — double-borrow race', () => {
         test('Parallel calls from Anna and Boris to contested book: exactly one 201 (with loans row), one 409, only one open loan and correct member', async (t) => {
             // Arrange: a server on the real test DB, and the input for this case
             const fixture = await loadFixture(pool, 'loans');
-            const { post } = await startServer(t, { dbClient: pool });
+            const { post } = await startServer(t, { dbClient: holdAfterEmptyKeyLookup(pool) });
             const memberA = fixture.members.find((m) => m.first_name === 'Anna').member_id;
             const memberB = fixture.members.find((m) => m.first_name === 'Boris').member_id;
             const book = fixture.books.find((b) => b.title === 'Contested Book').book_id;
@@ -428,6 +613,7 @@ describe('POST /loans — double-borrow race', () => {
             const loansBefore = await countLoans();
 
             // Act: two parallel calls with different idempotency keys.
+            // Held after the key lookup returns no row; both released only then.
             const [resA, resB] = await Promise.all([
                 callToCreate(post, bodyDataA, idempotencyKeyA),
                 callToCreate(post, bodyDataB, idempotencyKeyB),
