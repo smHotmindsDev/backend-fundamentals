@@ -389,7 +389,7 @@ Calculated based on the fixture from `api-contracts/members-fixture.json`. The `
 - **Happy path:**
   - Anna (member: ...101) + Available Book (book: ...201), fresh `Idempotency-Key` => `201` + `{loan_id, member, book, borrowed_at, due_at}` (no `returned_at`); `borrowed_at` is `CURRENT_DATE`, `due_at` is `CURRENT_DATE + 14 days` — assert a `loans` row created with a `copy_id` assigned
   - same call repeated with the **same** `Idempotency-Key` => `201`, same `loan_id` as the first call — assert no second row inserted
-  - parallel calls with Anna (member: ...101), Available Book (book: ...201), same `Idempotency-Key` => both `201`, **identical `loan_id`** in both responses — assert exactly **one** row in `loans` for that `idempotency_key`
+  - parallel calls with Anna (member: ...101), Available Book (book: ...201), same `Idempotency-Key` => both `201`, **identical `loan_id`** in both responses — assert exactly **one** row in `loans` for that `idempotency_key`. The test holds each call after its idempotency-key lookup has returned no row, and releases both only then, so both reach the insert of the only free copy (`...301`) before either commits
   - Anna (member: ...101) + Multi-Copy Book (book: ...204), one of two copies already on loan (...304) => `201` — assert the new row uses the free copy (`...305`), not `...304`
 - **Error / edge:**
   - unknown_member_id (member: ...999) => `404` `not_found` : `Member with id:00000000-...-999 undefined`
@@ -398,6 +398,9 @@ Calculated based on the fixture from `api-contracts/members-fixture.json`. The `
   - invalid `Content-Type` => `400` `bad_request`
   - malformed body (`member`/`book` missing or wrong type) => `422` `validation_error` with `details`
   - missing or non-uuid-v4 `Idempotency-Key` header, valid body => `422` `validation_error` with `details[].field = "Idempotency-Key"` — assert no `loans` row inserted
+  - same `Idempotency-Key`, Anna (member: ...101): first Available Book (book: ...201) => `201`, then Multi-Copy Book (book: ...204) => `422` `validation_error` `Idempotency-Key already used with a different member or book` (no `details` key) — assert exactly one `loans` row for that key, and its `book` is Available Book. Multi-Copy still has a free copy (`...305`), so a `409` for a missing copy cannot stand in for the `422`
+  - same `Idempotency-Key`: first Anna (member: ...101) + Available Book (book: ...201) => `201`, then Boris (member: ...102) + Available Book => the same `422` (no `details` key) — assert no second `loans` row for that key
+  - parallel calls with Anna (member: ...101) + Available Book (book: ...201) / Multi-Copy Book (book: ...204), same `Idempotency-Key` => exactly one `201` + `{loan_id, member, book, borrowed_at, due_at}`, exactly one `422` `validation_error` `Idempotency-Key already used with a different member or book` (no `details` key) — assert exactly one `loans` row for that `idempotency_key`, and its `book` equals `book` in the `201`. The test holds each call after its idempotency-key lookup has returned no row, and releases both only then, so both reach the insert before either commits
 
 ### `POST /loans` — double-borrow race
 

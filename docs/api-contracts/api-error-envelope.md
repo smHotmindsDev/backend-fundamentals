@@ -92,7 +92,7 @@ Each `statusCode` maps to exactly one `error`; a client may switch on either.
 | 429 | `rate_limit_error` |
 | 500 | `internal_error` |
 
-`details` is present only when `error` is `validation_error`. In every other case the key is absent — not `null`, not `[]`.
+`details` is present only when `error` is `validation_error`, and not in every such case: a reused `Idempotency-Key` returns `validation_error` without `details`. When `details` is absent, the key is absent — not `null`, not `[]`.
 
 The `statusCode` should be used to compare the HTTP status.
 The `requestId` is a server-generated UUID v4, present in every error response and echoed in the X-Request-Id response header. The same value appears in every log record for that request. An incoming X-Request-Id from the client is ignored — the server always generates its own, so a client cannot forge or collide log identifiers.
@@ -103,6 +103,6 @@ The `requestId` is non-deterministic, so test assertions cannot perform a deep e
 * **invalid_auth**: Key is missing or invalid.
 * **not_found**: Unknown resource or unknown ID in the request body.
 * **conflict**: Database state prevents the operation (e.g., no available copies, copy already occupied).
-* **validation_error**: unparseable JSON; JSON is valid but fails semantic validation; the only case containing `details`.
+* **validation_error**: unparseable JSON; JSON is valid but fails semantic validation; the only case containing `details`. Also an `Idempotency-Key` already used with a different request body (`POST /loans`); this case has no `details`, the reason is in `message`.
 * **rate_limit_error**: Key rate limit exceeded.
 * **internal_error**: Unexpected error; message is always static.
