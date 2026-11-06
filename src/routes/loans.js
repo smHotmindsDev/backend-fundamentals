@@ -32,6 +32,15 @@ async function findLoanByIdempotencyKey(client, idempotencyKey) {
     return existingKey.rows[0];
 }
 
+function replayOrReject(existing, { member, book }) {
+    if (!existing) return null;
+    // uuid columns come back lowercase; the schema keeps the client's case.
+    const sameMember = existing.member.toLowerCase() === member.toLowerCase();
+    const sameBook = existing.book.toLowerCase() === book.toLowerCase();
+    if (sameMember && sameBook) return existing;
+    throw ServerError.validation('Idempotency-Key already used with a different member or book');
+}
+
 async function findLoanById(client, loanId) {
     const existingLoan = await client.query(
         `SELECT loan_id, member, book, borrowed_at, due_at, returned_at
@@ -45,7 +54,8 @@ async function findLoanById(client, loanId) {
 
 async function borrowLoan(client, { member, book, idempotencyKey }) {
     const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
-    if (existing) return existing;
+    const replay = replayOrReject(existing, { member, book });
+    if (replay) return replay;
 
     // Check for the existence of the member
     const existingMember = await client.query(
@@ -170,11 +180,16 @@ loansRouter.post('/', async (req, res) => {
         // Rollback if any query failed
         await client.query('ROLLBACK');
 
-        if (err.code === '23505' && err.constraint === 'uidx_borrowed_book_copy') {
-            throw ServerError.conflict('copy already taken, conflict');
-        } else if (err.code === '23505' && err.constraint === 'uidx_loans_idempotency_key') {
+        if (
+            err.code === '23505' &&
+            (err.constraint === 'uidx_borrowed_book_copy' || err.constraint === 'uidx_loans_idempotency_key')
+        ) {
             const existing = await findLoanByIdempotencyKey(client, idempotencyKey);
-            if (existing) return res.status(201).json(existing);
+            const replay = replayOrReject(existing, { member, book });
+            if (replay) return res.status(201).json(replay);
+            if (err.constraint === 'uidx_borrowed_book_copy') {
+                throw ServerError.conflict('copy already taken, conflict');
+            }
         }
 
         // ServerError passes through the error handler as is; anything else becomes 500.
