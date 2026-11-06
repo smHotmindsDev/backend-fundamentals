@@ -19,6 +19,7 @@ export const EnvSchema = z.object({
     POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
 });
 
+// `|| '(root)'` is uncovered on purpose: EnvSchema has no object-level checks and is only called with process.env, so every issue names a variable.
 const formatIssues = (issues) =>
     issues.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`).join('\n');
 
