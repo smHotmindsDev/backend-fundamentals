@@ -397,6 +397,7 @@ Calculated based on the fixture from `api-contracts/members-fixture.json`. The `
   - Booked Out Book (book: ...203), without an available copy => `409` `conflict` : `copy already taken, conflict`
   - invalid `Content-Type` => `400` `bad_request`
   - malformed body (`member`/`book` missing or wrong type) => `422` `validation_error` with `details`
+  - body `[]` (valid JSON, not an object), valid `Content-Type` and `Idempotency-Key` uuid v4 => `422` `validation_error` with `details[0].field = "body"` and `details[0].code = "invalid_type"` — assert no `loans` row inserted
   - missing or non-uuid-v4 `Idempotency-Key` header, valid body => `422` `validation_error` with `details[].field = "Idempotency-Key"` — assert no `loans` row inserted
   - same `Idempotency-Key`, Anna (member: ...101): first Available Book (book: ...201) => `201`, then Multi-Copy Book (book: ...204) => `422` `validation_error` `Idempotency-Key already used with a different member or book` (no `details` key) — assert exactly one `loans` row for that key, and its `book` is Available Book. Multi-Copy still has a free copy (`...305`), so a `409` for a missing copy cannot stand in for the `422`
   - same `Idempotency-Key`: first Anna (member: ...101) + Available Book (book: ...201) => `201`, then Boris (member: ...102) + Available Book => the same `422` (no `details` key) — assert no second `loans` row for that key
