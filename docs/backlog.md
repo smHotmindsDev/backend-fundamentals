@@ -15,7 +15,8 @@ Ideas generated after the test plan was written (README: 🤖 AI-OK "generating 
 - [ ] **Retry with a key after a failed request.** First call `409` (no copy) → rolled back, key not stored. Copy is returned, client retries with the same key → `201`. Intended, or should failed responses be remembered too?
 - [ ] **Same member borrows a second copy of the same book** (new key, Multi-Copy Book). Today `201`. Is there a one-copy-per-member rule?
 - [ ] **Book exists but has zero copies.** Today `409 copy already taken, conflict`, although nothing was taken. Which status and message?
-- [ ] **Unknown fields in the body** (`{member, book, foo: 1}`). Schema is not strict, extras are silently stripped; the `unrecognized_keys → unknown_field` mapping in `src/routes/loans.js` is unreachable. Ignore or `422 unknown_field`?
+- [x] **Unknown fields in the body** (`{member, book, foo: 1}`). Schema is not strict, extras are silently stripped; the `unrecognized_keys → unknown_field` mapping in `src/routes/loans.js` is unreachable. Ignore or `422 unknown_field`?
+  - **Closed: ignore.** `create-loan.md` now says extra fields in the body are ignored, the schema stays non-strict, and the unreachable `unknown_field` mapping is removed. A typo in a required field name is still caught as `422 required`.
 
 ### C. Defined behaviour, not tested
 
