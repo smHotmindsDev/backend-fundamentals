@@ -61,9 +61,7 @@ A single error envelope is provided for the entire API.
             "enum": [
               "required",
               "invalid_type",
-              "invalid_format",
-              "out_of_range",
-              "unknown_field"
+              "invalid_format"
             ]
           },
           "message": {

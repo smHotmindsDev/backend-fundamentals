@@ -16,6 +16,8 @@ It is idempotent request.
 - `member` - uuid
 - `book` - uuid
 
+Extra fields in the body are ignored.
+
 Use `Buffer.byteLength(bodyData, 'utf8')` to automatically determine the value based on the size of the request body.
 `Content-Length`: standard HTTP framing. Clients using fetch get it automatically; a raw node:http client sets it with Buffer.byteLength(body, 'utf8').
 The client generates a new UUID v4 for each logical `POST /loans` and sends it in `Idempotency-Key`. The same value is resent only when retrying that request (timeout, lost response). A second loan needs a new key.
