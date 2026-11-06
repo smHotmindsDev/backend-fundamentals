@@ -19,6 +19,7 @@ It is idempotent request.
 Use `Buffer.byteLength(bodyData, 'utf8')` to automatically determine the value based on the size of the request body.
 `Content-Length`: standard HTTP framing. Clients using fetch get it automatically; a raw node:http client sets it with Buffer.byteLength(body, 'utf8').
 The client generates a new UUID v4 for each logical `POST /loans` and sends it in `Idempotency-Key`. The same value is resent only when retrying that request (timeout, lost response). A second loan needs a new key.
+A retry is the same request: same `Idempotency-Key`, same `member` and `book`. It returns `201` with the loan created by the first request, also when the first request is still in progress at the moment of the retry. A key that already belongs to a loan with a different `member` or `book` returns `422`.
 `X-API-Key: abcdef12345` is a placeholder.
 Authorization is described in a separate document.
 
@@ -60,6 +61,7 @@ Authorization is described in a separate document.
 - `404` — `Book with id:$1 undefined`
 - `409` — `copy already taken, conflict`
 - `422` — Validation failed — invalid request body (syntax, data types, required fields) or idempotency key in header (details[].field = "Idempotency-Key")
+- `422` — `Idempotency-Key already used with a different member or book` — the key belongs to a loan with another `member` or `book`
 - `500` — Internal Server Error — server-side errors
 
 ## Side effects
@@ -80,12 +82,18 @@ SELECT loan_id, member, book, borrowed_at, due_at
 FROM loans
 WHERE loans.idempotency_key = $1;
 ```
-If the query returns a row, this is a retry:
+If the query returns a row, compare its `member` and `book` with the request body.
+
+Same `member` and `book`, this is a retry:
 ```postgresql
 COMMIT;
 ```
 Return `201` with that row.
-Else, transaction continues.
+
+Different `member` or `book`, rollback here and error 422:
+`Idempotency-Key already used with a different member or book`
+
+If the query returns no row, transaction continues.
 
 Check for the existence of the member
 ```postgresql
@@ -139,16 +147,23 @@ COMMIT;
 ```
 Return `201` with the `RETURNING` row.
 
-If error.code === '23505' and error.constraint === 'uidx_borrowed_book_copy', we have rollback here and error 409:
-`copy already taken, conflict`
+A `23505` on INSERT means a concurrent transaction has already committed a conflicting row: the INSERT waited for it on the unique index and failed only after its `COMMIT`. That row is visible after our rollback.
 
-If error.code === '23505' and error.constraint === 'uidx_loans_idempotency_key', we have rollback here (the transaction is aborted; do not `COMMIT` it), then:
+If error.code === '23505' and error.constraint === 'uidx_borrowed_book_copy', we have rollback here (the transaction is aborted; do not `COMMIT` it), then check the key:
 ```postgresql
 SELECT loan_id, member, book, borrowed_at, due_at
 FROM loans
 WHERE idempotency_key = $1;
 ```
-Return `201` with that row.
+- Row found, same `member` and `book`: the copy was taken by the first request with this key. Return `201` with that row.
+- Row found, different `member` or `book`: error 422 `Idempotency-Key already used with a different member or book`.
+- No row: another client took the copy. Error 409 `copy already taken, conflict`.
+
+If error.code === '23505' and error.constraint === 'uidx_loans_idempotency_key', we have rollback here (the transaction is aborted; do not `COMMIT` it), then run the same key query:
+- Same `member` and `book`: return `201` with that row.
+- Different `member` or `book`: error 422 `Idempotency-Key already used with a different member or book`.
+
+Which of the two constraints reports the conflict depends on the order Postgres checks the unique indexes in, so both branches check the key the same way.
 
 ### Test fixture (not `../../seed.js`)
 
@@ -184,4 +199,5 @@ Anna borrows Available Book:
 }
 ```
 
-Retry with the same `Idempotency-Key` returns that same row (`201`).
+Retry with the same `Idempotency-Key`, `member` and `book` returns that same row (`201`), whether it arrives after the first request or in parallel with it.
+The same `Idempotency-Key` with a different `member` or `book` returns `422`.
