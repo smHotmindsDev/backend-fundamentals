@@ -30,6 +30,7 @@ export const createRequestLogger = (log = logger) =>
             return id;
         },
         customLogLevel: (req, res, err) => levelFor(res, err),
+        // `?? req.url` is uncovered on purpose: Express sets req.originalUrl on every request, so the fallback matters only without Express.
         customSuccessMessage: (req, res) => `${req.method} ${req.originalUrl ?? req.url} ${res.statusCode}`,
         customErrorMessage: (req, res) => `${req.method} ${req.originalUrl ?? req.url} ${res.statusCode}`,
         serializers: {

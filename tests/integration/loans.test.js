@@ -449,6 +449,31 @@ describe('POST /loans — transactional borrow', () => {
                 'details name the body',
             );
         });
+        test('Array body returns 422 validation_error with details[0].field body and code invalid_type, no row inserted', async (t) => {
+            // Arrange: a server on the real test DB. [] is valid JSON, so it reaches route validation.
+            await loadFixture(pool, 'loans');
+            const { post } = await startServer(t, { dbClient: pool });
+            const idempotencyKey = crypto.randomUUID();
+            const loansBefore = await countLoans();
+
+            // Act: one call. An array is JSON-encoded; a string body would be sent raw.
+            const res = await post('/loans', [], {
+                'Idempotency-Key': idempotencyKey,
+            });
+
+            // Assert 1: the HTTP contract. Header issues are pushed first, so index 0 is the body only when the key is valid.
+            assert.equal(res.status, 422);
+            const body = await res.json();
+            assert.equal(body.error, 'validation_error');
+            assert.ok(Array.isArray(body.details), 'details must be an array');
+            assert.equal(body.details.length, 1, 'a valid key leaves only the body issue');
+            assert.equal(body.details[0].field, 'body');
+            assert.equal(body.details[0].code, 'invalid_type');
+            assert.equal('loan_id' in body, false, 'an error response carries no loan');
+
+            // Assert 2: validation throws before connect, so the table does not change.
+            assert.equal(await countLoans(), loansBefore, 'no row inserted');
+        });
 
         test('Missing or non-uuid-v4 Idempotency-Key header with a valid body returns 422 validation_error with details field Idempotency-Key, no row inserted', async (t) => {
             // Arrange: server on the real test DB, a body that is valid on its own

@@ -31,8 +31,11 @@ const toOperational = (err) => {
 
 const errorHandlerMiddleware = (err, req, res, next) => {
     // Headers already on the wire: nothing safe to send, let Express close it.
+    // Uncovered on purpose: no route sends part of a response and then throws, so headers are never sent before this handler.
     if (res.headersSent) return next(err);
 
+    // The fallbacks below are uncovered on purpose: requestLoggerMiddleware runs first in src/app.js and always sets
+    // req.id, req.log and X-Request-Id, so they matter only if this handler is used without it.
     const requestId = req.id ?? randomUUID();
     if (!res.getHeader(REQUEST_ID_HEADER)) res.setHeader(REQUEST_ID_HEADER, requestId);
 

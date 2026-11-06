@@ -1,7 +1,8 @@
+import ServerError from './ServerError.js';
+
 export function createRateLimiter({ limit, windowMs }) {
     if (typeof limit !== 'number' || typeof windowMs !== 'number') {
-        // TODO Refactor with ServerError()
-        return 'incorrect type of arguments';
+        throw new ServerError('incorrect type of arguments', 500);
     }
 
     const store = new Map();
