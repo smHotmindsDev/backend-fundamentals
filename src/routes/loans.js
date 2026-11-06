@@ -7,7 +7,6 @@ const valueAt = (input, path) => path.reduce((current, key) => current?.[key], i
 
 const detailCode = (issue, input) => {
     if (issue.code === 'invalid_format') return 'invalid_format';
-    if (issue.code === 'too_small' || issue.code === 'too_big') return 'out_of_range';
     if (issue.code === 'unrecognized_keys') return 'unknown_field';
     if (issue.code === 'invalid_type' && valueAt(input, issue.path) === undefined) return 'required';
     return 'invalid_type';
