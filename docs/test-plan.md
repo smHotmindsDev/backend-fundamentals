@@ -36,11 +36,18 @@ Here: pagination math, rate-limiter logic, validation schemas.
   - `GET /books?search=%20` => `{ page: 1, per_page: 10, search: " " }`;
   - `GET /books?per_page=101` parses (clamp is pagination math); 
   - `GET /books?search=%25` and `GET /books?search=_` parse
+  - `GET /members?page=1&per_page=50` => `{ page: 1, per_page: 50 }`;
+  - `GET /members` or `GET /members?search=` => `{ page: 1, per_page: 50 }`;
+  - `GET /members?search=%20` => `{ page: 1, per_page: 50, search: " " }`;
+  - `GET /members?per_page=101` parses (clamp is pagination math);
+  - `GET /members?search=%25` and `GET /members?search=_` parse
   - `POST /loans` body `{ member: uuid, book: uuid }` + `Idempotency-Key` uuid v4 parses
   - `POST /loans/:id/return` uuid v4 parses
 - **Error / edge:** 
   - `GET /books?page=0`, `page=-1`, `page=abc`, `page=1.5` => invalid page (not a positive integer)
   - `GET /books?per_page=0`, `per_page=-1`, `per_page=abc`, `per_page=1.5` → invalid per_page (not a positive integer)
+  - `GET /members?page=0`, `page=-1`, `page=abc`, `page=1.5` => invalid page (not a positive integer)
+  - `GET /members?per_page=0`, `per_page=-1`, `per_page=abc`, `per_page=1.5` → invalid per_page (not a positive integer)
   - `POST /loans` body: `member` / `book` missing or wrong type → invalid (HTTP mapping is integration `422`)
   - `POST /loans` `Idempotency-Key` missing, empty string, not a uuid, or uuid v1 → invalid on field `idempotencyKey` (HTTP mapping is integration `422` with `details[].field = "Idempotency-Key"`). Each invalid case keeps the other fields valid, so it fails only for the reason in its name
   - `POST /loans/:id/return` wrong uuid type → invalid (HTTP mapping is integration `422`)
@@ -193,6 +200,188 @@ Calculated based on the fixture from `api-contracts/pagination-fixture.json`. Th
 - **Happy path:** n/a
 - **Error / edge:**
   - `page` or `per_page` set to `0`, `-1`, `abc`, or `1.5` (one parameter at a time, the other absent) => `400` `bad_request` (invalid query parameter; no `details`). Same envelope for both parameters, so one parametrised test covers all eight URLs
+
+### `GET /members` — B4. N+1 lab
+
+- **Why this level:** Real queries to Postgres; only open loans, `loans: []` for members without them and the order inside `loans` are query results, not an `if`
+- **Happy path:**
+  - `GET /members`, `GET /members?page=1`, `GET /members?search=` => `200` + JSON below (page 1 with 50 items)
+  - `GET /members?page=2` => `200` + JSON below (page 2 with 5 items; `…0102` keeps its open loan, so batching only the first page is caught)
+  - `GET /members?page=3` => `200` + `[]`
+  - `GET /members?per_page=55`, `GET /members?per_page=100` => `200` + 55 items: the 50 items of page 1 followed by the 5 items of page 2, in that order (one array, not two)
+  - `GET /members?per_page=2` => `200` + JSON below (page 1 with 2 items)
+  - `GET /members?search=lee` => `200` + JSON below (3 items: last name, first name, lower-case substring)
+  - `GET /members?search=_` => `200` + JSON below (1 item: the only name with a literal `_`)
+  - `GET /members?search=Anna Happy`, `GET /members?search=na Ha` => `200` + JSON below (1 item: the fragment spans the space)
+  - `GET /members?search=Happy Anna` => `200` + `[]` (last name before first name never matches)
+  - `GET /members?search=%20` => `200` + same body as `GET /members` (every full name contains a space)
+  - `GET /members?search=%25` => `200` + `[]` (no name contains `%`; a wildcard would match everything)
+  - `GET /members?search=zzz` => `200` + `[]`
+- **Error / edge:** n/a (invalid `page` / `per_page` is the next item)
+
+#### Expected body for `GET /members?search=&page=&per_page` (`200`)
+
+Calculated based on the fixture from `api-contracts/members-fixture.json`. The `search` parameter is absent; the default value is `per_page=50`. The calculation was performed based on the fixture after applying `ORDER BY member_id DESC`; inside each member `loans` follows `ORDER BY loan_id DESC`. Returned loans are absent: only `returned_at IS NULL` rows are current.
+
+`GET /members`, `GET /members?page=1`, `GET /members?search=` — 50 items:
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000154", "first_name": "Anna", "last_name": "Happy", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000402", "book": "00000000-0000-4000-8000-000000000202", "borrowed_at": "2026-09-01", "due_at": "2026-09-15" },
+      { "loan_id": "00000000-0000-4000-8000-000000000401", "book": "00000000-0000-4000-8000-000000000201", "borrowed_at": "2026-09-03", "due_at": "2026-09-17" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000153", "first_name": "Boris", "last_name": "Owner", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000403", "book": "00000000-0000-4000-8000-000000000201", "borrowed_at": "2026-09-05", "due_at": "2026-09-19" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000152", "first_name": "Clara", "last_name": "Lee", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000151", "first_name": "Lee", "last_name": "Wilson", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000406", "book": "00000000-0000-4000-8000-000000000203", "borrowed_at": "2026-08-20", "due_at": "2026-09-03" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000150", "first_name": "Ann_Marie", "last_name": "Smith", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000149", "first_name": "kaylee", "last_name": "Brown", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000148", "first_name": "Olena", "last_name": "Koval", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000147", "first_name": "Melissa", "last_name": "Carter", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000146", "first_name": "George", "last_name": "Mitchell", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000145", "first_name": "Amanda", "last_name": "Campbell", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000144", "first_name": "Brian", "last_name": "Rivera", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000143", "first_name": "Carol", "last_name": "Hall", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000142", "first_name": "Kevin", "last_name": "Baker", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000141", "first_name": "Dorothy", "last_name": "Nelson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000140", "first_name": "Kenneth", "last_name": "Adams", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000139", "first_name": "Michelle", "last_name": "Green", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000138", "first_name": "Joshua", "last_name": "Flores", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000137", "first_name": "Donna", "last_name": "Hill", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000136", "first_name": "Andrew", "last_name": "Nguyen", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000135", "first_name": "Emily", "last_name": "Torres", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000134", "first_name": "Paul", "last_name": "Scott", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000133", "first_name": "Kimberly", "last_name": "Wright", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000132", "first_name": "Steven", "last_name": "King", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000131", "first_name": "Ashley", "last_name": "Allen", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000130", "first_name": "Donald", "last_name": "Young", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000129", "first_name": "Sandra", "last_name": "Walker", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000128", "first_name": "Mark", "last_name": "Robinson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000127", "first_name": "Margaret", "last_name": "Lewis", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000126", "first_name": "Anthony", "last_name": "Ramirez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000125", "first_name": "Betty", "last_name": "Clark", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000124", "first_name": "Matthew", "last_name": "Sanchez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000123", "first_name": "Nancy", "last_name": "Harris", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000122", "first_name": "Daniel", "last_name": "White", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000121", "first_name": "Lisa", "last_name": "Thompson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000120", "first_name": "Charles", "last_name": "Perez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000119", "first_name": "Karen", "last_name": "Martin", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000118", "first_name": "Christopher", "last_name": "Jackson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000117", "first_name": "Sarah", "last_name": "Moore", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000116", "first_name": "Thomas", "last_name": "Taylor", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000115", "first_name": "Jessica", "last_name": "Thomas", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000114", "first_name": "Joseph", "last_name": "Anderson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000113", "first_name": "Susan", "last_name": "Wilson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000112", "first_name": "Richard", "last_name": "Gonzalez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000111", "first_name": "Barbara", "last_name": "Lopez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000110", "first_name": "William", "last_name": "Hernandez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000109", "first_name": "Elizabeth", "last_name": "Martinez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000108", "first_name": "David", "last_name": "Rodriguez", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000107", "first_name": "Linda", "last_name": "Davis", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000106", "first_name": "Michael", "last_name": "Miller", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000105", "first_name": "Jennifer", "last_name": "Garcia", "loans": [] }
+]
+```
+
+`GET /members?page=2` — 5 items (last page, `length < per_page`):
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000104", "first_name": "John", "last_name": "Jones", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000103", "first_name": "Patricia", "last_name": "Brown", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000102", "first_name": "Robert", "last_name": "Williams", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000408", "book": "00000000-0000-4000-8000-000000000202", "borrowed_at": "2026-09-10", "due_at": "2026-09-24" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000101", "first_name": "Mary", "last_name": "Johnson", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000100", "first_name": "James", "last_name": "Smith", "loans": [] }
+]
+```
+
+`GET /members?page=3` → `[]`.
+
+`GET /members?per_page=55`, `GET /members?per_page=100` — 55 items: the 50 items of page 1 followed by the 5 items of page 2, in that order (one array, not two).
+
+`GET /members?per_page=2` — 2 items (the two members with the most interesting loans; handy for a quick manual check):
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000154", "first_name": "Anna", "last_name": "Happy", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000402", "book": "00000000-0000-4000-8000-000000000202", "borrowed_at": "2026-09-01", "due_at": "2026-09-15" },
+      { "loan_id": "00000000-0000-4000-8000-000000000401", "book": "00000000-0000-4000-8000-000000000201", "borrowed_at": "2026-09-03", "due_at": "2026-09-17" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000153", "first_name": "Boris", "last_name": "Owner", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000403", "book": "00000000-0000-4000-8000-000000000201", "borrowed_at": "2026-09-05", "due_at": "2026-09-19" }
+    ]
+  }
+]
+```
+
+`GET /members?search=lee` — 3 items, `ORDER BY member_id DESC`, matched on last name, first name and a lower-case substring:
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000152", "first_name": "Clara", "last_name": "Lee", "loans": [] },
+  { "member_id": "00000000-0000-4000-8000-000000000151", "first_name": "Lee", "last_name": "Wilson", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000406", "book": "00000000-0000-4000-8000-000000000203", "borrowed_at": "2026-08-20", "due_at": "2026-09-03" }
+    ]
+  },
+  { "member_id": "00000000-0000-4000-8000-000000000149", "first_name": "kaylee", "last_name": "Brown", "loans": [] }
+]
+```
+
+`GET /members?search=_` → the single member `…0150` (`Ann_Marie Smith`, no loans):
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000150", "first_name": "Ann_Marie", "last_name": "Smith", "loans": [] }
+]
+```
+
+`GET /members?search=Anna Happy` and `GET /members?search=na Ha` → the single member `…0154` (the fragment spans the space between first and last name):
+
+```json
+[
+  { "member_id": "00000000-0000-4000-8000-000000000154", "first_name": "Anna", "last_name": "Happy", "loans": [
+      { "loan_id": "00000000-0000-4000-8000-000000000402", "book": "00000000-0000-4000-8000-000000000202", "borrowed_at": "2026-09-01", "due_at": "2026-09-15" },
+      { "loan_id": "00000000-0000-4000-8000-000000000401", "book": "00000000-0000-4000-8000-000000000201", "borrowed_at": "2026-09-03", "due_at": "2026-09-17" }
+    ]
+  }
+]
+```
+
+`GET /members?search=Happy Anna` → `[]` (last name before first name never matches).
+
+`GET /members?search=%20` (a single space) — same body as `GET /members`: every full name contains a space.
+
+`GET /members?search=%25` → `[]`. On the wire the percent sign is `%25`; a raw `search=%` is incomplete percent-encoding, not this case.
+
+`GET /members?search=zzz` → `[]`.
+
+### `GET /members` — query budget (N+1)
+
+- **Why this level:** The statement count is only visible against a real `pg` client; counted through the injected `dbClient`, no timing
+- **Happy path:**
+  - `GET /members` (page 1, 50 members) => at most 2 SQL statements (a per-member loans query would be 1 + 50 = 51)
+  - `GET /members?page=2` (5 members) => at most 2 statements (naive: 1 + 5)
+- **Error / edge:**
+  - `GET /members?page=3` (empty page) => 1 statement: the loans query is skipped
+
+### `GET /members` — invalid pagination parameters
+
+- **Why this level:** HTTP status mapping; no SQL
+- **Happy path:** n/a
+- **Error / edge:**
+  - `page` or `per_page` set to `0`, `-1`, `abc`, or `1.5` (one parameter at a time, the other absent) => `400` `bad_request` (invalid query parameter; no `details`). Same envelope for both parameters, so one parametrised test covers all eight URLs
+
 
 ### `POST /loans` — transactional borrow
 
