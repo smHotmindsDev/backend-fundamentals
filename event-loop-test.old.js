@@ -137,7 +137,8 @@ async function runAll() {
     // await firstTest();
     // await secondTest();
     // await secondTestFs();
-    await thirtyTest();
+    setImmediate(() => secondTest());
+    // await thirtyTest();
     console.log('All tests done');
 }
 
