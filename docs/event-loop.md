@@ -8,7 +8,7 @@ The event loop is the mechanism that continuously checks whether there is code r
 
 Not all asynchronous code is treated equally. The runtime splits it into two separate types of queues, heavily favoring microtasks:
 - microtask queue
-  - process.nextTick — a Node.js-specific queue, implemented at the runtime level (not part of libuv or V8); processed with the *highest priority* of all queues
+  - process.nextTick — a Node.js-specific queue, implemented at the runtime level (not part of libuv or V8). When Node drains the queues, this queue runs first. In the body of an ESM module it does not.
   - promises (.then/.catch/await) — part of the ECMAScript standard, implemented in V8
 - macrotask queue — a set of queues processed in a fixed order:
   - timers (setTimeout, setInterval)
@@ -17,7 +17,7 @@ Not all asynchronous code is treated equally. The runtime splits it into two sep
   - check (setImmediate)
   - close callbacks
 
-After each individual callback from the macrotask queue, the entire microtask queue is drained (first process.nextTick, then promise microtasks) before the event loop moves on to the next macrotask callback.
+After each callback from the macrotask queue, Node drains the microtask queues before the next macrotask. It runs `process.nextTick` first, then promise callbacks (`.then`, `.catch`, `await`). This order is the same in CommonJS and inside a later callback in an ESM file, for example I/O or `setImmediate`. The body of an ESM module is the exception. V8 is already draining the microtask queue there, so a resolved promise from the module body runs before `process.nextTick`.
 
 ## Answers to questions
 > *Route that does JSON.parse of a 100MB string vs a route that awaits a 5s timer. Hit both with parallel requests. Which blocks the whole server? Why?*
@@ -61,14 +61,16 @@ If you move the two calls within an I/O cycle, the immediate callback is always 
 If we run the following script which is not within an I/O cycle (i.e. the main module), the order in which the two timers are executed is non-deterministic
 
 ### Result
-**Confirmed with an exception.**
+**Partly confirmed.**
 
-If function are called from within the main module, then you can get an anomaly when the promise is executed before `process.nextTick`.
+In the body of an ESM module, the resolved promise always runs before `process.nextTick`.
 
-If function are called from within an I/O cycle or if you use CommonJS, the sequence is always `process.nextTick` > `resolved promise` > ...
+In CommonJS, and inside an event-loop callback in ESM (I/O, `setImmediate`), the order is always `process.nextTick` > `resolved promise`.
 
-In general, the behavior coincides with the expected one:
+Apart from the body of an ESM module, the order matches the prediction:
 `process.nextTick` > `resolved promise` > `setImmediate` > `setTimeout(fn, 0)`
+
+`setImmediate` before `setTimeout(fn, 0)` is guaranteed only inside an I/O callback: after the poll phase, the next phase is check. In the module body and inside a `setImmediate` callback, these two can change places. `setTimeout(fn, 0)` waits at least 1 ms, and the event loop passes the timers phase before it reaches the next check phase. If 1 ms has already passed, the timeout runs first.
 
 CommonJS Logs:
 ```aiignore
@@ -99,6 +101,18 @@ Resolved Promise (I/O) done at 42ms
 Immediate (I/O) done at 42ms
 Timeout (I/O) done at 43ms
 ```
+
+### Why
+
+The order depends on who runs the code.
+
+The body of an ESM module is a microtask. ESM allows `await` at the top level, so Node runs the module body like an async function, inside the microtask queue. V8 is already taking jobs from the microtask queue. A resolved promise from that body goes into the same queue, so it runs before `process.nextTick`. Node drains `process.nextTick` only after that.
+
+The body of a CommonJS module is a normal function call. When the call ends, Node drains the queues. `process.nextTick` runs first, then promises.
+
+An event-loop callback is also a normal call from Node. This is true in ESM and in CommonJS. The callback can come from I/O (the poll phase) or from `setImmediate` (the check phase). When the callback ends, Node drains `process.nextTick` first, then promises.
+
+This matches the Node.js documentation: [When to use `queueMicrotask()` vs. `process.nextTick()`](https://nodejs.org/api/process.html#when-to-use-queuemicrotask-vs-processnexttick). It describes both cases: CommonJS and the ESM module body. The ESM case was added to the docs in January 2025 (Node v20.19.0, v22.14.0, v23.7.0). Older docs showed the same order for both.
 
 ### Wrong decisions
 First, I formatted the promise in synchronous style, so I got incorrect results
