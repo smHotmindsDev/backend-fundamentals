@@ -1,0 +1,38 @@
+{
+  "authors": [
+    { "author_id": "00000000-0000-0000-0000-000000000000", "first_name": "Jules", "last_name": "Verne" }
+  ],
+  "members": [
+    { "member_id": "00000000-0000-0000-0000-000000000101", "first_name": "Anna", "last_name": "Happy" }
+  ],
+  "books": [
+    { "book_id": "00000000-0000-0000-0000-000000000000", "title": "Twenty Thousand Leagues", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 50, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000001", "title": "Around the World in 80 Days", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 49, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000002", "title": "Journey to the Centre of the Earth", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 48, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000003", "title": "From the Earth to the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 47, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000004", "title": "Michael Strogoff", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 46, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000005", "title": "Five Weeks in a Balloon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 45, "borrowed_at": "CURRENT_DATE - INTERVAL '89 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000006", "title": "In Search of the Castaways", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 44, "borrowed_at": "CURRENT_DATE - INTERVAL '90 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000007", "title": "Robur the Conqueror", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 44, "borrowed_at": "CURRENT_DATE - INTERVAL '30 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000008", "title": "The Steam House", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 42, "borrowed_at": "CURRENT_DATE - INTERVAL '91 day'" },
+    { "book_id": "00000000-0000-0000-0000-000000000009", "title": "Paris in the Twentieth Century", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 0, "borrowed_at": null },
+    { "book_id": "00000000-0000-0000-0000-000000000010", "title": "Around the Moon", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 0, "borrowed_at": null },
+    { "book_id": "00000000-0000-0000-0000-000000000011", "title": "The Green Ray", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 0, "borrowed_at": null },
+    { "book_id": "00000000-0000-0000-0000-000000000012", "title": "The Mysterious Island", "author": "00000000-0000-0000-0000-000000000000", "published_at": "1905-01-01", "inserted_loans": 100, "borrowed_at": "CURRENT_DATE - INTERVAL '100 day'" }
+  ],
+  "book_copies": [
+    { "copy_id": "00000000-0000-0000-0000-000000000200", "book_id": "00000000-0000-0000-0000-000000000000" },
+    { "copy_id": "00000000-0000-0000-0000-000000000201", "book_id": "00000000-0000-0000-0000-000000000001" },
+    { "copy_id": "00000000-0000-0000-0000-000000000202", "book_id": "00000000-0000-0000-0000-000000000002" },
+    { "copy_id": "00000000-0000-0000-0000-000000000203", "book_id": "00000000-0000-0000-0000-000000000003" },
+    { "copy_id": "00000000-0000-0000-0000-000000000204", "book_id": "00000000-0000-0000-0000-000000000004" },
+    { "copy_id": "00000000-0000-0000-0000-000000000205", "book_id": "00000000-0000-0000-0000-000000000005" },
+    { "copy_id": "00000000-0000-0000-0000-000000000206", "book_id": "00000000-0000-0000-0000-000000000006" },
+    { "copy_id": "00000000-0000-0000-0000-000000000207", "book_id": "00000000-0000-0000-0000-000000000007" },
+    { "copy_id": "00000000-0000-0000-0000-000000000208", "book_id": "00000000-0000-0000-0000-000000000008" },
+    { "copy_id": "00000000-0000-0000-0000-000000000209", "book_id": "00000000-0000-0000-0000-000000000009" },
+    { "copy_id": "00000000-0000-0000-0000-000000000210", "book_id": "00000000-0000-0000-0000-000000000010" },
+    { "copy_id": "00000000-0000-0000-0000-000000000211", "book_id": "00000000-0000-0000-0000-000000000011" },
+    { "copy_id": "00000000-0000-0000-0000-000000000212", "book_id": "00000000-0000-0000-0000-000000000012" }
+  ]
+}
